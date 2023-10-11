@@ -13,10 +13,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("name: {:?}", manymouse.devices[i].name);
     }
 
-    loop {
+    let mut num_events = 0;
+    while num_events < 100 {
         if let Some(event) = manymouse.poll_event()? {
             println!("event: {:?}", event);
-            break;
+            num_events += 1;
         }
     }
 
