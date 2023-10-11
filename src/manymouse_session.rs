@@ -8,13 +8,13 @@ use std::{error::Error, ffi::CStr};
 pub use self::bindings::ManyMouseEvent;
 use self::bindings::ManyMouseEventType_MANYMOUSE_EVENT_ABSMOTION;
 
-pub struct ManyMouse {
+pub struct ManyMouseSession {
     pub devices: Vec<InputDevice>
 }
 
-impl ManyMouse {
+impl ManyMouseSession {
     pub fn init() -> Result<Self, Box<dyn Error>> {
-        let num_devices: u32 = ManyMouse::call_init()?;
+        let num_devices: u32 = ManyMouseSession::call_init()?;
         let mut devices = Vec::new();
 
         for id in 0..num_devices {
@@ -28,7 +28,7 @@ impl ManyMouse {
             devices.push(InputDevice{id, name: name.to_string_lossy().into_owned()});
         }
 
-        Ok(ManyMouse{devices})
+        Ok(ManyMouseSession{devices})
     }
 
     pub fn poll_event(&self) -> Result<Option<ManyMouseEvent>, Box<dyn Error>> {
@@ -60,7 +60,7 @@ impl ManyMouse {
     }
 }
 
-impl Drop for ManyMouse {
+impl Drop for ManyMouseSession {
     fn drop(&mut self) {
         unsafe {
             bindings::ManyMouse_Quit()

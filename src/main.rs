@@ -1,11 +1,11 @@
-use manymouse::ManyMouse;
+use manymouse_session::ManyMouseSession;
 
-mod manymouse;
+mod manymouse_session;
 
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let manymouse = ManyMouse::init()?;
+    let manymouse = ManyMouseSession::init()?;
     let num_devices = manymouse.devices.len();
     println!("num_devices: {}", num_devices);
 
