@@ -6,7 +6,6 @@ mod bindings {
 use std::{error::Error, ffi::CStr};
 
 pub use self::bindings::ManyMouseEvent;
-use self::bindings::ManyMouseEventType_MANYMOUSE_EVENT_ABSMOTION;
 
 pub struct ManyMouseSession {
     pub devices: Vec<InputDevice>
@@ -37,6 +36,8 @@ impl ManyMouseSession {
             bindings::ManyMouse_PollEvent(&mut event)
         };
 
+        // println!("Poll response: {}", poll_response);
+
         if poll_response == -1 {
             return Err("Error polling ManyMouse".into());
         }
@@ -62,6 +63,7 @@ impl ManyMouseSession {
 
 impl Drop for ManyMouseSession {
     fn drop(&mut self) {
+        println!("Quitting ManyMouse");
         unsafe {
             bindings::ManyMouse_Quit()
         };
@@ -76,7 +78,7 @@ pub struct InputDevice {
 impl Default for ManyMouseEvent {
     fn default() -> Self {
         return ManyMouseEvent {
-            type_: ManyMouseEventType_MANYMOUSE_EVENT_ABSMOTION,
+            type_: bindings::ManyMouseEventType_MANYMOUSE_EVENT_ABSMOTION,
             device: 0,
             item: 0,
             value: 0,

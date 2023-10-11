@@ -1,25 +1,34 @@
-use manymouse_session::ManyMouseSession;
+use bevy::prelude::*;
 
-mod manymouse_session;
+mod mischief;
 
-use std::error::Error;
+use mischief::{MischiefPlugin, poll_events};
+use mischief::manymouse_session::ManyMouseSession;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let manymouse = ManyMouseSession::init()?;
-    let num_devices = manymouse.devices.len();
-    println!("num_devices: {}", num_devices);
+fn main() {
+    test_manymouse();
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins(MischiefPlugin)
+        .add_systems(Update, print_events.after(poll_events))
+        .run();
+}
 
-    for i in 0..num_devices {
-        println!("name: {:?}", manymouse.devices[i].name);
-    }
-
+fn test_manymouse() {
+    let session = ManyMouseSession::init().unwrap();
+    println!("Found {} mice", session.devices.len());
     let mut num_events = 0;
     while num_events < 100 {
-        if let Some(event) = manymouse.poll_event()? {
-            println!("event: {:?}", event);
+        if let Some(event) = session.poll_event().unwrap() {
+            println!("{:?}", event);
             num_events += 1;
         }
     }
+}
 
-    Ok(())
+fn print_events(mut reader: EventReader<mischief::MischiefEvent>) {
+    // println!("Events:");
+    for event in reader.iter() {
+        println!("{:?}", event);
+    }
 }

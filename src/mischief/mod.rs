@@ -1,0 +1,91 @@
+use bevy::prelude::*;
+
+use std::error::Error;
+
+#[allow(warnings)]
+mod bindings {
+    include!("bindings.rs");
+}
+pub mod manymouse_session;
+use manymouse_session::{ManyMouseSession, ManyMouseEvent};
+
+pub struct MischiefPlugin;
+
+impl Plugin for MischiefPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            .insert_resource::<ManyMouseResource>(ManyMouseResource::new().unwrap())
+            .add_event::<MischiefEvent>()
+            .add_systems(Update, poll_events);
+    }
+}
+
+#[derive(Resource)]
+pub struct ManyMouseResource {
+    pub session: ManyMouseSession,
+}
+
+impl ManyMouseResource {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
+        println!("Initializing ManyMouse");
+        let session = ManyMouseSession::init()?;
+        println!("Found {} mice", session.devices.len());
+        Ok(Self{session})
+    }
+}
+
+#[derive(Event, Debug)]
+pub struct MischiefEvent {
+    pub device: u32,
+    pub event_data: MischiefEventData,
+}
+
+#[derive(Debug)]
+pub enum MischiefEventData {
+    AbsMotion,
+    RelMotion {
+        x: i32,
+        y: i32,
+    },
+    Button,
+    Scroll,
+    Disconnect,
+}
+
+fn parse_event(event: ManyMouseEvent) -> MischiefEvent {
+    let event_data = match event.type_ {
+        bindings::ManyMouseEventType_MANYMOUSE_EVENT_ABSMOTION => {
+            MischiefEventData::AbsMotion
+        },
+        bindings::ManyMouseEventType_MANYMOUSE_EVENT_RELMOTION => {
+            let x = event.item == 0;
+            MischiefEventData::RelMotion {
+                x: if x {event.value} else {0},
+                y: if !x {event.value} else {0},
+            }
+        },
+        bindings::ManyMouseEventType_MANYMOUSE_EVENT_BUTTON => {
+            MischiefEventData::Button
+        },
+        bindings::ManyMouseEventType_MANYMOUSE_EVENT_SCROLL => {
+            MischiefEventData::Scroll
+        },
+        bindings::ManyMouseEventType_MANYMOUSE_EVENT_DISCONNECT => {
+            MischiefEventData::Disconnect
+        },
+        _ => {
+            panic!("Unknown event type");
+        }
+    };
+    MischiefEvent {
+        device: event.device,
+        event_data,
+    }
+}
+
+pub fn poll_events(session: Res<ManyMouseResource>, mut events: EventWriter<MischiefEvent>) {
+    // println!("Polling events");
+    while let Some(event) = session.session.poll_event().unwrap() {
+        events.send(parse_event(event));
+    }
+}
