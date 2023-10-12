@@ -37,6 +37,8 @@ fn main() {
 
 fn hide_os_cursor(mut windows: Query<&mut Window>) {
     let mut window = windows.single_mut();
+    let window_center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
+    window.set_cursor_position(Some(window_center));
     window.cursor.visible = false;
     window.cursor.grab_mode = bevy::window::CursorGrabMode::Locked;
 }
