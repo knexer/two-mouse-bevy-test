@@ -7,6 +7,7 @@ use mischief::manymouse_session::ManyMouseSession;
 
 fn main() {
     test_manymouse();
+
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(MischiefPlugin)

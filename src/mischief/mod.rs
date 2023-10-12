@@ -14,7 +14,7 @@ pub struct MischiefPlugin;
 impl Plugin for MischiefPlugin {
     fn build(&self, app: &mut App) {
         app
-            .insert_resource::<ManyMouseResource>(ManyMouseResource::new().unwrap())
+            .insert_non_send_resource::<ManyMouseResource>(ManyMouseResource::new().unwrap())
             .add_event::<MischiefEvent>()
             .add_systems(Update, poll_events);
     }
@@ -83,7 +83,7 @@ fn parse_event(event: ManyMouseEvent) -> MischiefEvent {
     }
 }
 
-pub fn poll_events(session: Res<ManyMouseResource>, mut events: EventWriter<MischiefEvent>) {
+pub fn poll_events(session: NonSend<ManyMouseResource>, mut events: EventWriter<MischiefEvent>) {
     // println!("Polling events");
     while let Some(event) = session.session.poll_event().unwrap() {
         events.send(parse_event(event));
