@@ -14,18 +14,18 @@ pub struct MischiefPlugin;
 impl Plugin for MischiefPlugin {
     fn build(&self, app: &mut App) {
         app
-            .insert_non_send_resource::<ManyMouseResource>(ManyMouseResource::new().unwrap())
+            .insert_non_send_resource::<MischiefSession>(MischiefSession::new().unwrap())
             .add_event::<MischiefEvent>()
             .add_systems(Update, poll_events);
     }
 }
 
 #[derive(Resource)]
-pub struct ManyMouseResource {
+pub struct MischiefSession {
     pub session: ManyMouseSession,
 }
 
-impl ManyMouseResource {
+impl MischiefSession {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         println!("Initializing ManyMouse");
         let session = ManyMouseSession::init()?;
@@ -83,7 +83,7 @@ fn parse_event(event: ManyMouseEvent) -> MischiefEvent {
     }
 }
 
-pub fn poll_events(session: NonSend<ManyMouseResource>, mut events: EventWriter<MischiefEvent>) {
+pub fn poll_events(session: NonSend<MischiefSession>, mut events: EventWriter<MischiefEvent>) {
     // println!("Polling events");
     while let Some(event) = session.session.poll_event().unwrap() {
         events.send(parse_event(event));
