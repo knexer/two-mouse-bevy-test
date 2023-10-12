@@ -47,7 +47,10 @@ pub enum MischiefEventData {
         x: i32,
         y: i32,
     },
-    Button,
+    Button {
+        button: u32,
+        pressed: bool,
+    },
     Scroll,
     Disconnect,
 }
@@ -65,7 +68,11 @@ fn parse_event(event: ManyMouseEvent) -> MischiefEvent {
             }
         },
         bindings::ManyMouseEventType_MANYMOUSE_EVENT_BUTTON => {
-            MischiefEventData::Button
+            println!("Button event: {:?}", event);
+            MischiefEventData::Button {
+                button: event.item,
+                pressed: event.value == 1,
+            }
         },
         bindings::ManyMouseEventType_MANYMOUSE_EVENT_SCROLL => {
             MischiefEventData::Scroll

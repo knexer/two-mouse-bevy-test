@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 mod mischief;
 
-use mischief::{MischiefPlugin, poll_events, MischiefSession, MischiefEvent, MischiefEventData};
+use mischief::{MischiefPlugin, poll_events, MischiefEvent, MischiefEventData};
 
 // Making a game with Bevy + Mischief
 // Specifically, a game where you control two ends of a rope with two mice
@@ -10,9 +10,16 @@ use mischief::{MischiefPlugin, poll_events, MischiefSession, MischiefEvent, Misc
 // You can move the rope ends independently, but you can't move them too far apart
 // You must deposit the candy in a receptacle on one side of the screen
 
+// Or... what if it's a mouth? Two-mouse pacman controls???
+// Could open and close the mouth (by moving cursors together and apart) to move forward,
+// and then turn left and right by moving both cursors left and right.
+// BONKERS controls lol
+
 // First steps:
-// Make two mouse cursors that you can move around (done)
-// Assign each cursor to a hand (i.e. click left mouse button to assign to left hand, right mouse button to assign to right hand)
+// Make two virtual cursors that you can move around (done)
+// Assign each cursor to a hand (i.e. click LMB to assign to left hand, RMB to assign to right hand) (done)
+// Capture and hide the OS cursor (done)
+// Press escape to quit (done)
 // Make two rigid bodies that fall from the top of the screen
 // Make the bodies dangle from the cursors
 
@@ -20,9 +27,18 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(MischiefPlugin)
-        .add_systems(Startup, (spawn_camera, spawn_cursors))
+        .add_systems(Startup, (spawn_camera, hide_os_cursor))
+        .add_systems(Update, bevy::window::close_on_esc)
+        .add_systems(Update, spawn_left_cursor().run_if(not(any_with_component::<LeftCursor>())))
+        .add_systems(Update, spawn_right_cursor().run_if(not(any_with_component::<RightCursor>())))
         .add_systems(Update, move_cursors.after(poll_events))
         .run();
+}
+
+fn hide_os_cursor(mut windows: Query<&mut Window>) {
+    let mut window = windows.single_mut();
+    window.cursor.visible = false;
+    window.cursor.grab_mode = bevy::window::CursorGrabMode::Locked;
 }
 
 #[derive(Component)]
@@ -32,20 +48,45 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
 
-fn spawn_cursors(mut commands: Commands, mouse_session: NonSend<MischiefSession>) {
-    for device in &mouse_session.session.devices {
-        commands.spawn((
-            SpriteBundle {
-                transform: Transform::from_xyz(0.0, 0.0, 0.0),
-                sprite: Sprite {
-                    custom_size: Some(Vec2::splat(10.0)),
-                    ..Default::default()
+#[derive(Component, Default)]
+struct LeftCursor;
+
+fn spawn_left_cursor() -> impl Fn(Commands, EventReader<MischiefEvent>) {
+    spawn_cursor::<LeftCursor>(Vec2::new(-100.0, 0.0), 0)
+}
+
+#[derive(Component, Default)]
+struct RightCursor;
+
+fn spawn_right_cursor() -> impl Fn(Commands, EventReader<MischiefEvent>) {
+    spawn_cursor::<RightCursor>(Vec2::new(100.0, 0.0), 1)
+}
+
+fn spawn_cursor<T>(start_pos: Vec2, button_id: u32) -> impl Fn(Commands, EventReader<MischiefEvent>) where T: Component + Default {
+    return move |mut commands: Commands, mut mouse_events: EventReader<MischiefEvent>| {
+        for event in mouse_events.iter() {
+            match event.event_data {
+                MischiefEventData::Button { button, pressed } => {
+                    if button == button_id && pressed {
+                        commands.spawn((
+                            SpriteBundle {
+                                transform: Transform::from_xyz(start_pos.x, start_pos.y, 0.0),
+                                sprite: Sprite {
+                                    custom_size: Some(Vec2::splat(10.0)),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            },
+                            Cursor(event.device),
+                            T::default()
+                        ));
+                        return;
+                    }
                 },
-                ..Default::default()
-            },
-            Cursor(device.id)
-        ));
-    }
+                _=> {}
+            }
+        }
+    };
 }
 
 fn move_cursors(
