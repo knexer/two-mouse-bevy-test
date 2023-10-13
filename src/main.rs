@@ -107,14 +107,15 @@ fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, device: u32) where 
 
     let body_size = 10.0;
     let shift = 20.0;
-    for i in 0..10 {
+    const NUM_ROPES:u32 = 3;
+    for i in 0..NUM_ROPES {
         let dx = (i + 1) as f32 * shift;
         let rope = RopeJointBuilder::new()
             .local_anchor2(Vec2::new(0.0, 0.0))
             .limits([0.0, shift]);
         let joint = ImpulseJoint::new(parent_id, rope);
 
-        let body_size = match i { 9 => 20.0, _ => body_size };
+        let body_size = match i + 1 { NUM_ROPES => 20.0, _ => body_size };
 
         parent_id = commands.spawn((
             SpriteBundle {
@@ -163,8 +164,7 @@ fn move_cursors(
             if cursor.0 == event.device {
                 match event.event_data {
                     MischiefEventData::RelMotion { x, y } => {
-                        transform.translation.x += x as f32;
-                        transform.translation.y -= y as f32;
+                        transform.translation += Vec3::new(x as f32, -y as f32, 0.0);
                     },
                     MischiefEventData::Disconnect => {
                         panic!("Mouse disconnected");
