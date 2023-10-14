@@ -1,4 +1,7 @@
-use bevy::prelude::*;
+use bevy::{
+    input::common_conditions::{input_just_pressed, input_toggle_active},
+    prelude::*,
+};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
 
@@ -36,23 +39,35 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(MischiefPlugin)
         .add_plugins(PhysicsPlugins::new(FixedUpdate))
-        .add_plugins(WorldInspectorPlugin::new())
-        .add_systems(Startup, (spawn_camera, hide_os_cursor))
+        .add_plugins(WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::Grave)))
+        .add_systems(
+            Update,
+            toggle_os_cursor.run_if(input_just_pressed(KeyCode::Grave)),
+        )
+        .add_systems(Startup, (spawn_camera, toggle_os_cursor))
         .add_systems(Startup, spawn_test_bodies)
         .add_systems(Startup, spawn_cursors)
         .add_systems(Update, bevy::window::close_on_esc)
         .add_systems(Update, attach_cursors)
-        .add_systems(Update, move_cursors.after(poll_events))
+        .add_systems(
+            Update,
+            move_cursors
+                .after(poll_events)
+                .run_if(input_toggle_active(true, KeyCode::Grave)),
+        )
         .add_systems(FixedUpdate, apply_cursor_force.before(PhysicsSet::Prepare))
         .run();
 }
 
-fn hide_os_cursor(mut windows: Query<&mut Window>) {
+fn toggle_os_cursor(mut windows: Query<&mut Window>) {
     let mut window = windows.single_mut();
     let window_center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
     window.set_cursor_position(Some(window_center));
-    window.cursor.visible = false;
-    window.cursor.grab_mode = bevy::window::CursorGrabMode::Locked;
+    window.cursor.visible = !window.cursor.visible;
+    window.cursor.grab_mode = match window.cursor.visible {
+        true => bevy::window::CursorGrabMode::None,
+        false => bevy::window::CursorGrabMode::Locked,
+    };
 }
 
 #[derive(Component)]
@@ -182,7 +197,7 @@ fn spawn_rope(
 ) -> (Entity, Vec2) {
     // Total width of n segments: width = (n + 1) * GAP + n * body_size
     // Solving for body_size: body_size = (width - (n + 1) * GAP) / n
-    const GAP: f32 = 0.1;
+    const GAP: f32 = 0.05;
     let total_gap_width = (num_segments + 1) as f32 * GAP;
     let body_length = ((end_pos.x - start_pos.x) - total_gap_width) / num_segments as f32;
     const THICKNESS: f32 = 0.05;
@@ -215,8 +230,8 @@ fn spawn_rope(
 
         let rope_joint = RevoluteJoint::new(prev_id, current_id)
             .with_local_anchor_1(prev_anchor)
-            .with_local_anchor_2(Vec2::new(-(body_length) / 2.0, 0.0));
-        prev_anchor = Vec2::new((body_length) / 2.0, 0.0);
+            .with_local_anchor_2(Vec2::new(-(body_length + GAP) / 2.0, 0.0));
+        prev_anchor = Vec2::new((body_length + GAP) / 2.0, 0.0);
         commands.spawn(rope_joint);
 
         prev_id = current_id;
