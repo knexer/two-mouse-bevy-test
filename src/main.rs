@@ -298,8 +298,8 @@ fn apply_cursor_force(
 
         pd.integral_error += error * time.period.as_secs_f32();
         pd.integral_error = pd.integral_error.clamp_length_max(pd.max_integral_error);
-        // let d_error = (error - pd.prev_error) / time.delta_seconds();
-        let u_pd = pd.p * error + pd.i * pd.integral_error; // + pd.d * d_error;
+        let d_error = (error - pd.prev_error) / time.period.as_secs_f32();
+        let u_pd = pd.p * error + pd.i * pd.integral_error + pd.d * d_error;
 
         let applied_acceleration = u_pd / time.period.as_secs_f32();
         force.apply_force(mass.0 * applied_acceleration);
