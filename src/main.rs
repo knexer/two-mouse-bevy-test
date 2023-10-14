@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod mischief;
 
@@ -35,12 +36,12 @@ fn main() {
         .add_plugins(MischiefPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(PIXELS_PER_METER))
         .add_plugins(RapierDebugRenderPlugin::default())
+        // .add_plugins(WorldInspectorPlugin::new())
         .add_systems(Startup, (spawn_camera, hide_os_cursor))
         .add_systems(Startup, spawn_test_bodies)
+        .add_systems(Startup, spawn_cursors)
         .add_systems(Update, bevy::window::close_on_esc)
-        .add_systems(Update, spawn_cursors.run_if(
-            not(any_with_component::<LeftCursor>())
-            .or_else(not(any_with_component::<RightCursor>()))))
+        .add_systems(Update, attach_cursors)
         .add_systems(Update, move_cursors.after(poll_events))
         .add_systems(Update, apply_cursor_force.after(move_cursors)) // TODO update order relative to physics?
         .run();
@@ -55,7 +56,7 @@ fn hide_os_cursor(mut windows: Query<&mut Window>) {
 }
 
 #[derive(Component)]
-struct Cursor(u32);
+struct Cursor(Option<u32>);
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
@@ -67,22 +68,25 @@ struct LeftCursor;
 #[derive(Component, Default)]
 struct RightCursor;
 
-fn spawn_cursors(
-    mut commands: Commands,
+fn attach_cursors(
     mut mouse_events: EventReader<MischiefEvent>,
-    left_cursors: Query<&Cursor, With<LeftCursor>>,
-    right_cursors: Query<&Cursor, With<RightCursor>>,
+    mut left_cursors: Query<&mut Cursor, (With<LeftCursor>, Without<RightCursor>)>,
+    mut right_cursors: Query<&mut Cursor, (With<RightCursor>, Without<LeftCursor>)>,
 ) {
+    let left_cursor_device = left_cursors.single().0;
+    let right_cursor_device = right_cursors.single().0;
     for event in mouse_events.iter() {
         match event.event_data {
             MischiefEventData::Button { button: 0, pressed: true } => {
-                if left_cursors.is_empty() && (right_cursors.is_empty() || right_cursors.single().0 != event.device) {
-                    spawn_cursor::<LeftCursor>(&mut commands, Vec2::new(-200.0, 0.0), event.device);
+                if left_cursor_device == None && right_cursor_device != Some(event.device) {
+                    let mut cursor = left_cursors.single_mut();
+                    cursor.0 = Some(event.device);
                 }
             },
             MischiefEventData::Button { button: 1, pressed: true } => {
-                if right_cursors.is_empty() && (left_cursors.is_empty() || left_cursors.single().0 != event.device) {
-                    spawn_cursor::<RightCursor>(&mut commands, Vec2::new(200.0, 0.0), event.device);
+                if right_cursor_device == None && left_cursor_device != Some(event.device) {
+                    let mut cursor = right_cursors.single_mut();
+                    cursor.0 = Some(event.device);
                 }
             },
             _ => {}
@@ -90,7 +94,14 @@ fn spawn_cursors(
     }
 }
 
-fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, device: u32) where T: Component + Default {
+fn spawn_cursors(
+    mut commands: Commands,
+) {
+    spawn_cursor::<LeftCursor>(&mut commands, Vec2::new(-200.0, 0.0));
+    spawn_cursor::<RightCursor>(&mut commands, Vec2::new(200.0, 0.0));
+}
+
+fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2) where T: Component + Default {
     let cursor_size = 40.0;
     let mut parent_id = commands.spawn(
         (
@@ -117,7 +128,7 @@ fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, device: u32) where 
             ExternalImpulse::default(),
             LockedAxes::ROTATION_LOCKED,
             Collider::cuboid(cursor_size / 2.0, cursor_size / 2.0),
-            Cursor(device),
+            Cursor(None),
             T::default()
         )).id();
 
@@ -185,7 +196,7 @@ fn move_cursors(
 
     for event in mouse_events.iter() {
         for (mut target_velocity, cursor) in cursor_query.iter_mut() {
-            if cursor.0 == event.device {
+            if cursor.0 == Some(event.device) {
                 match event.event_data {
                     MischiefEventData::RelMotion { x, y } => {
                         target_velocity.0 += Vec2::new(x as f32, -y as f32) / time.delta_seconds();
@@ -218,8 +229,8 @@ fn apply_cursor_force(mut cursors: Query<(&TargetVelocity, &mut PIDController, &
         let error = target_velocity.0 - velocity.linvel;
         pd.integral_error += error * time.delta_seconds();
         pd.integral_error = pd.integral_error.clamp_length_max(pd.max_integral_error);
-        let d_error = (error - pd.prev_error) / time.delta_seconds();
-        let u_pd = pd.p * error + pd.i * pd.integral_error + pd.d * d_error;
+        // let d_error = (error - pd.prev_error) / time.delta_seconds();
+        let u_pd = pd.p * error + pd.i * pd.integral_error;// + pd.d * d_error;
 
         // Multiply by mass to get impulse from difference in velocity
         force.impulse = mass.0.mass * u_pd;
