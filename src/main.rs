@@ -27,11 +27,13 @@ use mischief::{MischiefPlugin, poll_events, MischiefEvent, MischiefEventData};
 // Move the cursor with forces so it doesn't make the rope go crazy
 // Make a single rope that connects the two cursors
 
+const PIXELS_PER_METER: f32 = 100.0;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(MischiefPlugin)
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(PIXELS_PER_METER))
         .add_plugins(RapierDebugRenderPlugin::default())
         .add_systems(Startup, (spawn_camera, hide_os_cursor))
         .add_systems(Startup, spawn_test_bodies)
@@ -40,6 +42,7 @@ fn main() {
             not(any_with_component::<LeftCursor>())
             .or_else(not(any_with_component::<RightCursor>()))))
         .add_systems(Update, move_cursors.after(poll_events))
+        .add_systems(Update, apply_cursor_force.after(move_cursors)) // TODO update order relative to physics?
         .run();
 }
 
@@ -88,7 +91,7 @@ fn spawn_cursors(
 }
 
 fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, device: u32) where T: Component + Default {
-    let cursor_size = 20.0;
+    let cursor_size = 40.0;
     let mut parent_id = commands.spawn(
         (
             SpriteBundle {
@@ -99,23 +102,39 @@ fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, device: u32) where 
                 },
                 ..default()
             },
-            RigidBody::KinematicPositionBased,
+            RigidBody::Dynamic,
+            TargetVelocity(Vec2::ZERO),
+            PIDController {
+                p: 1.0,
+                i: 1.0,
+                d: 0.0,
+                max_integral_error: 10.0,
+                prev_error: Vec2::ZERO,
+                integral_error: Vec2::ZERO,
+            },
+            ReadMassProperties::default(),
+            Velocity::default(),
+            ExternalImpulse::default(),
+            LockedAxes::ROTATION_LOCKED,
             Collider::cuboid(cursor_size / 2.0, cursor_size / 2.0),
             Cursor(device),
             T::default()
         )).id();
 
     let body_size = 10.0;
-    let shift = 20.0;
-    const NUM_ROPES:u32 = 3;
+    let start_shift = 10.0 + cursor_size / 2.0;
+    let shift= 10.0 + body_size / 2.0;
+    let final_shift = 20.0;
+    const NUM_ROPES:u32 = 4;
     for i in 0..NUM_ROPES {
-        let dx = (i + 1) as f32 * shift;
+        let dx = start_shift + i as f32 * shift + match i + 1 { NUM_ROPES => final_shift - shift, _ => 0.0 };
+
         let rope = RopeJointBuilder::new()
             .local_anchor2(Vec2::new(0.0, 0.0))
-            .limits([0.0, shift]);
+            .limits([0.0, match i + 1 { 1 => start_shift, NUM_ROPES => final_shift, _ => shift }]);
         let joint = ImpulseJoint::new(parent_id, rope);
 
-        let body_size = match i + 1 { NUM_ROPES => 20.0, _ => body_size };
+        let body_size = match i + 1 { NUM_ROPES => 30.0, _ => body_size };
 
         parent_id = commands.spawn((
             SpriteBundle {
@@ -157,14 +176,18 @@ fn spawn_test_bodies(mut commands: Commands) {
 
 fn move_cursors(
     mut mouse_events: EventReader<MischiefEvent>,
-    mut cursor_query: Query<(&mut Transform, &Cursor)>
+    mut cursor_query: Query<(&mut TargetVelocity, &Cursor)>
 ) {
+    for (mut target_velocity, _) in cursor_query.iter_mut() {
+        target_velocity.0 = Vec2::ZERO;
+    }
+
     for event in mouse_events.iter() {
-        for (mut transform, cursor) in cursor_query.iter_mut() {
+        for (mut target_velocity, cursor) in cursor_query.iter_mut() {
             if cursor.0 == event.device {
                 match event.event_data {
                     MischiefEventData::RelMotion { x, y } => {
-                        transform.translation += Vec3::new(x as f32, -y as f32, 0.0);
+                        target_velocity.0 += Vec2::new(x as f32, -y as f32) * PIXELS_PER_METER;
                     },
                     MischiefEventData::Disconnect => {
                         panic!("Mouse disconnected");
@@ -173,5 +196,33 @@ fn move_cursors(
                 }
             }
         }
+    }
+}
+
+#[derive(Component)]
+struct TargetVelocity(Vec2);
+
+#[derive(Component)]
+struct PIDController {
+    p: f32,
+    i: f32,
+    d: f32,
+    max_integral_error: f32,
+    integral_error: Vec2,
+    prev_error: Vec2,
+}
+
+fn apply_cursor_force(mut cursors: Query<(&TargetVelocity, &mut PIDController, &ReadMassProperties, &Velocity, &mut ExternalImpulse)>, time: Res<Time>) {
+    for (target_velocity, mut pd, mass, velocity, mut force) in cursors.iter_mut() {
+        let error = target_velocity.0 - velocity.linvel;
+        pd.integral_error += error * time.delta_seconds();
+        pd.integral_error = pd.integral_error.clamp_length_max(pd.max_integral_error);
+        let d_error = (error - pd.prev_error) / time.delta_seconds();
+        let u_pd = pd.p * error + pd.i * pd.integral_error + pd.d * d_error;
+
+        // Multiply by mass to get impulse from difference in velocity
+        force.impulse = mass.0.mass * u_pd;
+
+        pd.prev_error = error;
     }
 }
