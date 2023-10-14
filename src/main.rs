@@ -132,13 +132,32 @@ enum Layer {
 fn spawn_cursors(mut commands: Commands) {
     let left_pos = Vec2::new(-3.0, 0.0);
     let right_pos = Vec2::new(3.0, 0.0);
-    let left_cursor = spawn_cursor::<LeftCursor>(&mut commands, left_pos, None, "Left Cursor");
-    let last_rope = spawn_rope(&mut commands, left_pos, right_pos, 20, left_cursor);
-    spawn_cursor::<RightCursor>(&mut commands, right_pos, Some(last_rope), "Right Cursor");
+    let player_id = commands
+        .spawn((Name::new("Player"), SpatialBundle::default()))
+        .id();
+
+    let left_cursor =
+        spawn_cursor::<LeftCursor>(&mut commands, player_id, left_pos, None, "Left Cursor");
+    let last_rope = spawn_rope(
+        &mut commands,
+        player_id,
+        left_pos,
+        right_pos,
+        20,
+        left_cursor,
+    );
+    spawn_cursor::<RightCursor>(
+        &mut commands,
+        player_id,
+        right_pos,
+        Some(last_rope),
+        "Right Cursor",
+    );
 }
 
 fn spawn_cursor<T>(
     commands: &mut Commands,
+    player_id: Entity,
     start_pos: Vec2,
     connect_to: Option<(Entity, Vec2)>,
     name: &str,
@@ -178,11 +197,18 @@ where
         ))
         .id();
 
+    commands.entity(player_id).push_children(&[cursor_id]);
+
     if let Some((entity, prev_anchor)) = connect_to {
-        let rope_joint = RevoluteJoint::new(entity, cursor_id)
-            .with_local_anchor_1(prev_anchor)
-            .with_local_anchor_2(Vec2::new(0.0, 0.0));
-        commands.spawn(rope_joint);
+        let joint_id = commands
+            .spawn((
+                RevoluteJoint::new(entity, cursor_id)
+                    .with_local_anchor_1(prev_anchor)
+                    .with_local_anchor_2(Vec2::new(0.0, 0.0)),
+                Name::new("Rope joint final"),
+            ))
+            .id();
+        commands.entity(player_id).push_children(&[joint_id]);
     };
 
     return cursor_id;
@@ -190,6 +216,7 @@ where
 
 fn spawn_rope(
     commands: &mut Commands,
+    player_id: Entity,
     start_pos: Vec2,
     end_pos: Vec2,
     num_segments: u32,
@@ -227,13 +254,19 @@ fn spawn_rope(
                 Name::new(format!("Rope segment {}", i)),
             ))
             .id();
+        commands.entity(player_id).push_children(&[current_id]);
 
-        let rope_joint = RevoluteJoint::new(prev_id, current_id)
-            .with_local_anchor_1(prev_anchor)
-            .with_local_anchor_2(Vec2::new(-(body_length + GAP) / 2.0, 0.0));
+        let joint_id = commands
+            .spawn((
+                RevoluteJoint::new(prev_id, current_id)
+                    .with_local_anchor_1(prev_anchor)
+                    .with_local_anchor_2(Vec2::new(-(body_length + GAP) / 2.0, 0.0)),
+                Name::new(format!("Rope joint {}", i)),
+            ))
+            .id();
+        commands.entity(player_id).push_children(&[joint_id]);
+
         prev_anchor = Vec2::new((body_length + GAP) / 2.0, 0.0);
-        commands.spawn(rope_joint);
-
         prev_id = current_id;
     }
     return (prev_id, prev_anchor);
