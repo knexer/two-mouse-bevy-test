@@ -24,7 +24,7 @@ use mischief::{MischiefPlugin, poll_events, MischiefEvent, MischiefEventData};
 // Make two rigid bodies that fall from the top of the screen (done)
 // Make the bodies dangle from the cursors (done)
 // Make a rope of bodies that dangles from the cursors (done)
-// Move the cursor with forces so it doesn't make the rope go crazy
+// Move the cursor with forces so it doesn't make the rope go crazy (done)
 // Make a single rope that connects the two cursors
 
 const PIXELS_PER_METER: f32 = 100.0;
@@ -176,7 +176,8 @@ fn spawn_test_bodies(mut commands: Commands) {
 
 fn move_cursors(
     mut mouse_events: EventReader<MischiefEvent>,
-    mut cursor_query: Query<(&mut TargetVelocity, &Cursor)>
+    mut cursor_query: Query<(&mut TargetVelocity, &Cursor)>,
+    time: Res<Time>,
 ) {
     for (mut target_velocity, _) in cursor_query.iter_mut() {
         target_velocity.0 = Vec2::ZERO;
@@ -187,7 +188,7 @@ fn move_cursors(
             if cursor.0 == event.device {
                 match event.event_data {
                     MischiefEventData::RelMotion { x, y } => {
-                        target_velocity.0 += Vec2::new(x as f32, -y as f32) * PIXELS_PER_METER;
+                        target_velocity.0 += Vec2::new(x as f32, -y as f32) / time.delta_seconds();
                     },
                     MischiefEventData::Disconnect => {
                         panic!("Mouse disconnected");
