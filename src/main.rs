@@ -1,10 +1,10 @@
 use bevy::prelude::*;
-use bevy_xpbd_2d::{prelude::*, PhysicsStepSet};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_xpbd_2d::prelude::*;
 
 mod mischief;
 
-use mischief::{MischiefPlugin, poll_events, MischiefEvent, MischiefEventData};
+use mischief::{poll_events, MischiefEvent, MischiefEventData, MischiefPlugin};
 
 // Making a game with Bevy + Mischief
 // Specifically, a game where you control two ends of a rope with two mice
@@ -26,7 +26,7 @@ use mischief::{MischiefPlugin, poll_events, MischiefEvent, MischiefEventData};
 // Make the bodies dangle from the cursors (done)
 // Make a rope of bodies that dangles from the cursors (done)
 // Move the cursor with forces so it doesn't make the rope go crazy (done)
-// Make a single rope that connects the two cursors
+// Make a single rope that connects the two cursors (done! finally!)
 
 const PIXELS_PER_METER: f32 = 100.0;
 
@@ -85,18 +85,24 @@ fn attach_cursors(
     let right_cursor_device = right_cursors.single().0;
     for event in mouse_events.iter() {
         match event.event_data {
-            MischiefEventData::Button { button: 0, pressed: true } => {
+            MischiefEventData::Button {
+                button: 0,
+                pressed: true,
+            } => {
                 if left_cursor_device == None && right_cursor_device != Some(event.device) {
                     let mut cursor = left_cursors.single_mut();
                     cursor.0 = Some(event.device);
                 }
-            },
-            MischiefEventData::Button { button: 1, pressed: true } => {
+            }
+            MischiefEventData::Button {
+                button: 1,
+                pressed: true,
+            } => {
                 if right_cursor_device == None && left_cursor_device != Some(event.device) {
                     let mut cursor = right_cursors.single_mut();
                     cursor.0 = Some(event.device);
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -108,25 +114,26 @@ enum Layer {
     Other,
 }
 
-fn spawn_cursors(
-    mut commands: Commands,
-) {
+fn spawn_cursors(mut commands: Commands) {
     let left_pos = Vec2::new(-3.0, 0.0);
     let right_pos = Vec2::new(3.0, 0.0);
     let left_cursor = spawn_cursor::<LeftCursor>(&mut commands, left_pos, None, "Left Cursor");
-    let last_rope = spawn_rope(
-        &mut commands,
-        left_pos,
-        right_pos,
-    20,
-        left_cursor);
+    let last_rope = spawn_rope(&mut commands, left_pos, right_pos, 20, left_cursor);
     spawn_cursor::<RightCursor>(&mut commands, right_pos, Some(last_rope), "Right Cursor");
 }
 
-fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, connect_to: Option<(Entity, Vec2)>, name: &str) -> Entity where T: Component + Default {
+fn spawn_cursor<T>(
+    commands: &mut Commands,
+    start_pos: Vec2,
+    connect_to: Option<(Entity, Vec2)>,
+    name: &str,
+) -> Entity
+where
+    T: Component + Default,
+{
     let cursor_size = 0.4;
-    let cursor_id = commands.spawn(
-        (
+    let cursor_id = commands
+        .spawn((
             SpriteBundle {
                 transform: Transform::from_xyz(start_pos.x, start_pos.y, 0.0),
                 sprite: Sprite {
@@ -153,7 +160,8 @@ fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, connect_to: Option<
             Cursor(None),
             T::default(),
             Name::new(name.to_owned()),
-        )).id();
+        ))
+        .id();
 
     if let Some((entity, prev_anchor)) = connect_to {
         let rope_joint = RevoluteJoint::new(entity, cursor_id)
@@ -165,8 +173,13 @@ fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, connect_to: Option<
     return cursor_id;
 }
 
-fn spawn_rope(commands: &mut Commands, start_pos: Vec2, end_pos: Vec2, num_segments: u32, parent_id: Entity) -> (Entity, Vec2)
-{
+fn spawn_rope(
+    commands: &mut Commands,
+    start_pos: Vec2,
+    end_pos: Vec2,
+    num_segments: u32,
+    parent_id: Entity,
+) -> (Entity, Vec2) {
     // Total width of n segments: width = (n + 1) * GAP + n * body_size
     // Solving for body_size: body_size = (width - (n + 1) * GAP) / n
     const GAP: f32 = 0.1;
@@ -179,37 +192,40 @@ fn spawn_rope(commands: &mut Commands, start_pos: Vec2, end_pos: Vec2, num_segme
     for i in 0..num_segments {
         let dx = (i as f32 + 1.0) * GAP + (i as f32) * body_length;
 
-        let current_id = commands.spawn((
-            SpriteBundle {
-                transform: Transform::from_xyz(start_pos.x + dx + body_length / 2.0, start_pos.y, 0.0),
-                sprite: Sprite {
-                    custom_size: Some(Vec2::new(body_length, THICKNESS)),
+        let current_id = commands
+            .spawn((
+                SpriteBundle {
+                    transform: Transform::from_xyz(
+                        start_pos.x + dx + body_length / 2.0,
+                        start_pos.y,
+                        0.0,
+                    ),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(body_length, THICKNESS)),
+                        ..default()
+                    },
                     ..default()
                 },
-                ..default()
-            },
-            RigidBody::Dynamic,
-            Collider::cuboid(body_length, THICKNESS),
-            CollisionLayers::new([Layer::Rope], [Layer::Other]),
-            Name::new(format!("Rope segment {}", i)),
-        )).id();
+                RigidBody::Dynamic,
+                Collider::cuboid(body_length, THICKNESS),
+                CollisionLayers::new([Layer::Rope], [Layer::Other]),
+                Name::new(format!("Rope segment {}", i)),
+            ))
+            .id();
 
         let rope_joint = RevoluteJoint::new(prev_id, current_id)
             .with_local_anchor_1(prev_anchor)
             .with_local_anchor_2(Vec2::new(-(body_length) / 2.0, 0.0));
         prev_anchor = Vec2::new((body_length) / 2.0, 0.0);
         commands.spawn(rope_joint);
-        
+
         prev_id = current_id;
     }
     return (prev_id, prev_anchor);
 }
 
 fn spawn_test_bodies(mut commands: Commands) {
-    let positions = vec![
-        Vec2::new(-2.0, 3.0),
-        Vec2::new(2.0, 3.0),
-    ];
+    let positions = vec![Vec2::new(-2.0, 3.0), Vec2::new(2.0, 3.0)];
     let body_size = 0.5;
     for position in positions {
         commands.spawn((
@@ -241,8 +257,9 @@ fn move_cursors(
             if cursor.0 == Some(event.device) {
                 match event.event_data {
                     MischiefEventData::RelMotion { x, y } => {
-                        target_velocity.0 += Vec2::new(x as f32, -y as f32) / (PIXELS_PER_METER * time.delta_seconds());
-                    },
+                        target_velocity.0 += Vec2::new(x as f32, -y as f32)
+                            / (PIXELS_PER_METER * time.delta_seconds());
+                    }
                     MischiefEventData::Disconnect => {
                         panic!("Mouse disconnected");
                     }
@@ -266,14 +283,23 @@ struct PIDController {
     prev_error: Vec2,
 }
 
-fn apply_cursor_force(mut cursors: Query<(&TargetVelocity, &mut PIDController, &Mass, &LinearVelocity, &mut ExternalForce)>, time: Res<FixedTime>) {
+fn apply_cursor_force(
+    mut cursors: Query<(
+        &TargetVelocity,
+        &mut PIDController,
+        &Mass,
+        &LinearVelocity,
+        &mut ExternalForce,
+    )>,
+    time: Res<FixedTime>,
+) {
     for (target_velocity, mut pd, mass, velocity, mut force) in cursors.iter_mut() {
         let error = target_velocity.0 - velocity.0;
 
         pd.integral_error += error * time.period.as_secs_f32();
         pd.integral_error = pd.integral_error.clamp_length_max(pd.max_integral_error);
         // let d_error = (error - pd.prev_error) / time.delta_seconds();
-        let u_pd = pd.p * error + pd.i * pd.integral_error;// + pd.d * d_error;
+        let u_pd = pd.p * error + pd.i * pd.integral_error; // + pd.d * d_error;
 
         let applied_acceleration = u_pd / time.period.as_secs_f32();
         force.apply_force(mass.0 * applied_acceleration);
