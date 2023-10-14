@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
+use bevy_xpbd_2d::{prelude::*, PhysicsStepSet};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod mischief;
@@ -32,28 +32,19 @@ const PIXELS_PER_METER: f32 = 100.0;
 
 fn main() {
     App::new()
+        .register_type::<TargetVelocity>()
         .add_plugins(DefaultPlugins)
         .add_plugins(MischiefPlugin)
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(PIXELS_PER_METER))
-        .add_plugins(RapierDebugRenderPlugin::default())
-        // .add_plugins(WorldInspectorPlugin::new())
-        .add_systems(Startup, tweak_physics)
+        .add_plugins(PhysicsPlugins::new(FixedUpdate))
+        .add_plugins(WorldInspectorPlugin::new())
         .add_systems(Startup, (spawn_camera, hide_os_cursor))
         .add_systems(Startup, spawn_test_bodies)
         .add_systems(Startup, spawn_cursors)
         .add_systems(Update, bevy::window::close_on_esc)
         .add_systems(Update, attach_cursors)
         .add_systems(Update, move_cursors.after(poll_events))
-        .add_systems(Update, apply_cursor_force.after(move_cursors)) // TODO update order relative to physics?
+        .add_systems(FixedUpdate, apply_cursor_force.before(PhysicsSet::Prepare))
         .run();
-}
-
-fn tweak_physics(mut context: ResMut<RapierContext>) {
-    // println!("{}", context.integration_parameters.max_velocity_iterations);
-    // println!("{}", context.integration_parameters.max_stabilization_iterations);
-    context.integration_parameters.max_velocity_iterations = 64;
-    // context.integration_parameters.max_stabilization_iterations = 1;
-    context.integration_parameters.damping_ratio = 0.9;
 }
 
 fn hide_os_cursor(mut windows: Query<&mut Window>) {
@@ -68,7 +59,15 @@ fn hide_os_cursor(mut windows: Query<&mut Window>) {
 struct Cursor(Option<u32>);
 
 fn spawn_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Camera2dBundle {
+        projection: OrthographicProjection {
+            far: 1000.,
+            near: -1000.,
+            scale: 1.0 / PIXELS_PER_METER,
+            ..default()
+        },
+        ..default()
+    });
 }
 
 #[derive(Component, Default)]
@@ -103,24 +102,30 @@ fn attach_cursors(
     }
 }
 
+#[derive(PhysicsLayer)]
+enum Layer {
+    Rope,
+    Other,
+}
+
 fn spawn_cursors(
     mut commands: Commands,
 ) {
-    let start_pos = Vec2::new(-200.0, 0.0);
-    let end_pos = Vec2::new(200.0, 0.0);
-    let left_cursor = spawn_cursor::<LeftCursor>(&mut commands, start_pos, None);
+    let left_pos = Vec2::new(-3.0, 0.0);
+    let right_pos = Vec2::new(3.0, 0.0);
+    let left_cursor = spawn_cursor::<LeftCursor>(&mut commands, left_pos, None, "Left Cursor");
     let last_rope = spawn_rope(
         &mut commands,
-        start_pos,
-        end_pos,
-    3,
+        left_pos,
+        right_pos,
+    20,
         left_cursor);
-    spawn_cursor::<RightCursor>(&mut commands, Vec2::new(200.0, 0.0), Some(last_rope));
+    spawn_cursor::<RightCursor>(&mut commands, right_pos, Some(last_rope), "Right Cursor");
 }
 
-fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, connect_to: Option<(Entity, Vec2)>) -> Entity where T: Component + Default {
-    let cursor_size = 40.0;
-    let mut entity_commands = commands.spawn(
+fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, connect_to: Option<(Entity, Vec2)>, name: &str) -> Entity where T: Component + Default {
+    let cursor_size = 0.4;
+    let cursor_id = commands.spawn(
         (
             SpriteBundle {
                 transform: Transform::from_xyz(start_pos.x, start_pos.y, 0.0),
@@ -133,65 +138,48 @@ fn spawn_cursor<T>(commands: &mut Commands, start_pos: Vec2, connect_to: Option<
             RigidBody::Dynamic,
             TargetVelocity(Vec2::ZERO),
             PIDController {
-                p: 0.5,
-                i: 0.1,
+                p: 1.0,
+                i: 1.0,
                 d: 0.0,
-                max_integral_error: 10.0,
+                max_integral_error: 0.2,
                 prev_error: Vec2::ZERO,
                 integral_error: Vec2::ZERO,
             },
-            ReadMassProperties::default(),
-            Velocity::default(),
-            ExternalImpulse::default(),
+            LinearVelocity::default(),
+            ExternalForce::default().with_persistence(false),
             LockedAxes::ROTATION_LOCKED,
-            Collider::cuboid(cursor_size / 2.0, cursor_size / 2.0),
-            CollisionGroups::new(Group::GROUP_1, Group::ALL - Group::GROUP_1),
+            Collider::cuboid(cursor_size, cursor_size),
+            CollisionLayers::new([Layer::Rope], [Layer::Other]),
             Cursor(None),
-            T::default()
-        ));
+            T::default(),
+            Name::new(name.to_owned()),
+        )).id();
 
     if let Some((entity, prev_anchor)) = connect_to {
-        println!("Connecting to {:?}", entity);
-        let rope = RopeJointBuilder::new()
-            .local_anchor1(prev_anchor)
-            .local_anchor2(Vec2::new(0.0, 0.0))
-            .limits([0.0, 10.0]);
-        entity_commands.insert(ImpulseJoint::new(entity, rope));
+        let rope_joint = RevoluteJoint::new(entity, cursor_id)
+            .with_local_anchor_1(prev_anchor)
+            .with_local_anchor_2(Vec2::new(0.0, 0.0));
+        commands.spawn(rope_joint);
     };
 
-    return entity_commands.id();
+    return cursor_id;
 }
 
 fn spawn_rope(commands: &mut Commands, start_pos: Vec2, end_pos: Vec2, num_segments: u32, parent_id: Entity) -> (Entity, Vec2)
 {
     // Total width of n segments: width = (n + 1) * GAP + n * body_size
     // Solving for body_size: body_size = (width - (n + 1) * GAP) / n
-    const GAP: f32 = 10.0;
+    const GAP: f32 = 0.1;
     let total_gap_width = (num_segments + 1) as f32 * GAP;
     let body_length = ((end_pos.x - start_pos.x) - total_gap_width) / num_segments as f32;
-    const THICKNESS: f32 = 5.0;
-    println!("start x: {}", start_pos.x);
-    println!("end x: {}", end_pos.x);
-    println!("total width: {}", end_pos.x - start_pos.x);
-    println!("total_gap_width: {}", total_gap_width);
-    println!("body_length: {}", body_length);
+    const THICKNESS: f32 = 0.05;
 
-    let mut parent_id = parent_id;
+    let mut prev_id = parent_id;
     let mut prev_anchor = Vec2::new(0.0, 0.0);
     for i in 0..num_segments {
         let dx = (i as f32 + 1.0) * GAP + (i as f32) * body_length;
-        println!("i: {}", i);
-        println!("dx: {}", dx);
-        println!("left edge: {}", start_pos.x + dx);
-        println!("center: {}", start_pos.x + dx + body_length / 2.0);
 
-        let rope = RopeJointBuilder::new()
-            .local_anchor1(prev_anchor)
-            .local_anchor2(Vec2::new(-(body_length) / 2.0, 0.0))
-            .limits([0.0, GAP]);
-        prev_anchor = Vec2::new((body_length) / 2.0, 0.0);
-
-        let mut entity_commands = commands.spawn((
+        let current_id = commands.spawn((
             SpriteBundle {
                 transform: Transform::from_xyz(start_pos.x + dx + body_length / 2.0, start_pos.y, 0.0),
                 sprite: Sprite {
@@ -201,27 +189,28 @@ fn spawn_rope(commands: &mut Commands, start_pos: Vec2, end_pos: Vec2, num_segme
                 ..default()
             },
             RigidBody::Dynamic,
-            Collider::cuboid(body_length / 2.0, THICKNESS / 2.0),
-            CollisionGroups::new(Group::GROUP_1, Group::ALL - Group::GROUP_1),
-        ));
+            Collider::cuboid(body_length, THICKNESS),
+            CollisionLayers::new([Layer::Rope], [Layer::Other]),
+            Name::new(format!("Rope segment {}", i)),
+        )).id();
 
-        if i == 0 {
-            entity_commands.insert(ImpulseJoint::new(parent_id, rope));
-        } else {
-            entity_commands.insert(MultibodyJoint::new(parent_id, rope));
-        }
+        let rope_joint = RevoluteJoint::new(prev_id, current_id)
+            .with_local_anchor_1(prev_anchor)
+            .with_local_anchor_2(Vec2::new(-(body_length) / 2.0, 0.0));
+        prev_anchor = Vec2::new((body_length) / 2.0, 0.0);
+        commands.spawn(rope_joint);
         
-        parent_id = entity_commands.id();
+        prev_id = current_id;
     }
-    return (parent_id, prev_anchor);
+    return (prev_id, prev_anchor);
 }
 
 fn spawn_test_bodies(mut commands: Commands) {
     let positions = vec![
-        Vec2::new(-200.0, 300.0),
-        Vec2::new(200.0, 300.0),
+        Vec2::new(-2.0, 3.0),
+        Vec2::new(2.0, 3.0),
     ];
-    let body_size = 20.0;
+    let body_size = 0.5;
     for position in positions {
         commands.spawn((
             SpriteBundle {
@@ -233,7 +222,7 @@ fn spawn_test_bodies(mut commands: Commands) {
                 ..default()
             },
             RigidBody::Dynamic,
-            Collider::cuboid(body_size / 2.0, body_size / 2.0),
+            Collider::cuboid(body_size, body_size),
         ));
     }
 }
@@ -252,7 +241,7 @@ fn move_cursors(
             if cursor.0 == Some(event.device) {
                 match event.event_data {
                     MischiefEventData::RelMotion { x, y } => {
-                        target_velocity.0 += Vec2::new(x as f32, -y as f32) / time.delta_seconds();
+                        target_velocity.0 += Vec2::new(x as f32, -y as f32) / (PIXELS_PER_METER * time.delta_seconds());
                     },
                     MischiefEventData::Disconnect => {
                         panic!("Mouse disconnected");
@@ -264,7 +253,7 @@ fn move_cursors(
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Reflect, Debug)]
 struct TargetVelocity(Vec2);
 
 #[derive(Component)]
@@ -277,16 +266,17 @@ struct PIDController {
     prev_error: Vec2,
 }
 
-fn apply_cursor_force(mut cursors: Query<(&TargetVelocity, &mut PIDController, &ReadMassProperties, &Velocity, &mut ExternalImpulse)>, time: Res<Time>) {
+fn apply_cursor_force(mut cursors: Query<(&TargetVelocity, &mut PIDController, &Mass, &LinearVelocity, &mut ExternalForce)>, time: Res<FixedTime>) {
     for (target_velocity, mut pd, mass, velocity, mut force) in cursors.iter_mut() {
-        let error = target_velocity.0 - velocity.linvel;
-        pd.integral_error += error * time.delta_seconds();
+        let error = target_velocity.0 - velocity.0;
+
+        pd.integral_error += error * time.period.as_secs_f32();
         pd.integral_error = pd.integral_error.clamp_length_max(pd.max_integral_error);
         // let d_error = (error - pd.prev_error) / time.delta_seconds();
         let u_pd = pd.p * error + pd.i * pd.integral_error;// + pd.d * d_error;
 
-        // Multiply by mass to get impulse from difference in velocity
-        force.impulse = mass.0.mass * u_pd;
+        let applied_acceleration = u_pd / time.period.as_secs_f32();
+        force.apply_force(mass.0 * applied_acceleration);
 
         pd.prev_error = error;
     }
