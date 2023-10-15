@@ -1,14 +1,21 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_xpbd_2d::prelude::*;
 
 use crate::{
+    path::Path,
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
     PIXELS_PER_METER,
 };
 
-pub fn spawn_level(mut commands: Commands, windows: Query<&Window>) {
+pub fn spawn_level(
+    mut commands: Commands,
+    windows: Query<&Window>,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<ColorMaterial>>,
+) {
     spawn_cursors(&mut commands);
     spawn_walls(&mut commands, windows);
+    spawn_walls_v2(&mut commands, meshes, materials);
 }
 
 #[derive(PhysicsLayer)]
@@ -224,4 +231,38 @@ fn spawn_walls(commands: &mut Commands, windows: Query<&Window>) {
                 Name::new("Top wall"),
             ));
         });
+}
+
+fn spawn_walls_v2(
+    commands: &mut Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    const WIDTH: f32 = 16.0;
+    const HEIGHT: f32 = 9.0;
+
+    let mut path = Path::new();
+    path.move_to(Vec2::new(0.0, 0.0));
+    path.line_to(Vec2::new(0.0, 1.0));
+    path.line_to(Vec2::new(0.5, 1.0));
+    // path.line_to(Vec2::new(0.5, 0.5));
+    // path.line_to(Vec2::new(1.0, 0.5));
+    // path.line_to(Vec2::new(1.0, 0.0));
+    path.arc_to(Vec2::new(1.0, 0.5), Vec2::new(0.5, 0.5), 10);
+    path.arc_to(Vec2::new(0.5, 0.0), Vec2::new(1.0, 0.0), 10);
+    path.close();
+    path.reverse();
+
+    commands.spawn((
+        Name::new("TestShape"),
+        RigidBody::Static,
+        path.build_collider(),
+        MaterialMesh2dBundle {
+            transform: Transform::from_xyz(2.0, -2.0, 0.0),
+            mesh: meshes.add(path.build_triangle_mesh()).into(),
+            material: materials.add(ColorMaterial::from(Color::PURPLE)),
+            ..default()
+        },
+        CollisionLayers::new([Layer::Other], [Layer::Rope, Layer::Other]),
+    ));
 }

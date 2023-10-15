@@ -11,6 +11,7 @@ use player::PlayerPlugin;
 use rand::Rng;
 
 mod mischief;
+mod path;
 mod player;
 mod spawn_level;
 
@@ -40,9 +41,9 @@ mod spawn_level;
 // Spawn a purple square and a green circle at the top of the screen. (done)
 // Spawn on a timer instead of at the start. (done)
 // Randomize their params (size, position, velocity, etc.). (position done)
-// Split out some modules.
+// Split out some modules. (done)
 // Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain.
-// Pick a color palette. (done)
+// Pick a color palette.
 // Add a score counter for each side.
 
 // Bugs:
