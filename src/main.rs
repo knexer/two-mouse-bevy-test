@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::{
     input::common_conditions::{input_just_pressed, input_toggle_active},
     prelude::*,
@@ -35,8 +37,15 @@ use mischief::{poll_events, MischiefEvent, MischiefEventData, MischiefPlugin};
 
 // Todo list:
 // Spawn a purple square and a green circle at the top of the screen. (done)
-// Spawn on a timer instead of at the start.
-// Randomize their params (size, position, velocity, etc.)
+// Spawn on a timer instead of at the start. (done)
+// Randomize their params (size, position, velocity, etc.). (position done)
+// Split out some modules.
+// Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain.
+// Pick a color palette.
+// Add a score counter for each side.
+
+// Bugs:
+// Sometimes the game freezes, maybe physics related? Seems to happen when physics objects are overlapping.
 
 const PIXELS_PER_METER: f32 = 100.0;
 
@@ -55,10 +64,8 @@ fn main() {
         .add_systems(Startup, (spawn_camera, toggle_os_cursor))
         .add_systems(Startup, spawn_walls)
         .add_systems(Startup, spawn_cursors)
-        .add_systems(
-            Startup,
-            (configure_shapes, apply_deferred, spawn_test_shapes).chain(),
-        )
+        .add_systems(Startup, configure_shapes)
+        .add_systems(Update, spawn_shapes)
         .add_systems(Update, bevy::window::close_on_esc)
         .add_systems(Update, attach_cursors)
         .add_systems(
@@ -290,6 +297,7 @@ struct ShapeConfig {
     mesh: Mesh2dHandle,
     material: Handle<ColorMaterial>,
     collider: Collider,
+    timer: Timer,
 }
 
 fn configure_shapes(
@@ -311,6 +319,7 @@ fn configure_shapes(
                 .into(),
             material: materials.add(ColorMaterial::from(Color::PURPLE)),
             collider: Collider::cuboid(default_size, default_size),
+            timer: Timer::from_seconds(3.0, TimerMode::Once),
         },
         Name::new("SquareConfig"),
     ));
@@ -327,18 +336,30 @@ fn configure_shapes(
                 .into(),
             material: materials.add(ColorMaterial::from(Color::GREEN)),
             collider: Collider::ball(default_size / 2.0),
+            timer: Timer::from_seconds(4.5, TimerMode::Once),
         },
         Name::new("CircleConfig"),
     ));
 }
 
-fn spawn_test_shapes(mut commands: Commands, shape_configs: Query<&ShapeConfig>) {
+fn spawn_shapes(
+    mut commands: Commands,
+    mut shape_configs: Query<&mut ShapeConfig>,
+    time: Res<Time>,
+) {
     let min_x = -1.5;
     let max_x = 1.5;
     let min_y = 2.5;
     let max_y = 3.0;
     let mut rng = rand::thread_rng();
-    for shape_config in shape_configs.iter() {
+    for mut shape_config in shape_configs.iter_mut() {
+        if !shape_config
+            .timer
+            .tick(Duration::from_secs_f32(time.delta_seconds()))
+            .just_finished()
+        {
+            continue;
+        }
         let x = rng.gen_range(min_x..max_x);
         let y = rng.gen_range(min_y..max_y);
         commands.spawn((
@@ -351,6 +372,7 @@ fn spawn_test_shapes(mut commands: Commands, shape_configs: Query<&ShapeConfig>)
             RigidBody::Dynamic,
             shape_config.collider.clone(),
         ));
+        shape_config.timer = Timer::from_seconds(3.0, TimerMode::Once);
     }
 }
 
