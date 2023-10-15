@@ -39,13 +39,14 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(MischiefPlugin)
         .add_plugins(PhysicsPlugins::new(FixedUpdate))
+        .insert_resource(SubstepCount(30))
         .add_plugins(WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::Grave)))
         .add_systems(
             Update,
             toggle_os_cursor.run_if(input_just_pressed(KeyCode::Grave)),
         )
         .add_systems(Startup, (spawn_camera, toggle_os_cursor))
-        .add_systems(Startup, spawn_test_bodies)
+        .add_systems(Startup, (spawn_walls, spawn_test_bodies))
         .add_systems(Startup, spawn_cursors)
         .add_systems(Update, bevy::window::close_on_esc)
         .add_systems(Update, attach_cursors)
@@ -130,8 +131,8 @@ enum Layer {
 }
 
 fn spawn_cursors(mut commands: Commands) {
-    let left_pos = Vec2::new(-3.0, 0.0);
-    let right_pos = Vec2::new(3.0, 0.0);
+    let left_pos = Vec2::new(-2.0, 0.0);
+    let right_pos = Vec2::new(2.0, 0.0);
     let player_id = commands
         .spawn((Name::new("Player"), SpatialBundle::default()))
         .id();
@@ -165,7 +166,7 @@ fn spawn_cursor<T>(
 where
     T: Component + Default,
 {
-    let cursor_size = 0.4;
+    let cursor_size = 0.3;
     let cursor_id = commands
         .spawn((
             SpriteBundle {
@@ -182,7 +183,8 @@ where
                 p: 1.0,
                 i: 1.0,
                 d: 0.0,
-                max_integral_error: 0.2,
+                max_positional_error: 3.0,
+                max_integral_error: 0.5,
                 prev_error: Vec2::ZERO,
                 integral_error: Vec2::ZERO,
             },
@@ -273,8 +275,8 @@ fn spawn_rope(
 }
 
 fn spawn_test_bodies(mut commands: Commands) {
-    let positions = vec![Vec2::new(-2.0, 3.0), Vec2::new(2.0, 3.0)];
-    let body_size = 0.5;
+    let positions = vec![Vec2::new(-1.5, 3.0), Vec2::new(1.5, 3.0)];
+    let body_size = 0.25;
     for position in positions {
         commands.spawn((
             SpriteBundle {
@@ -289,6 +291,71 @@ fn spawn_test_bodies(mut commands: Commands) {
             Collider::cuboid(body_size, body_size),
         ));
     }
+}
+
+fn spawn_walls(mut commands: Commands, windows: Query<&Window>) {
+    let window = windows.single();
+    let wall_inset = 0.1;
+    let wall_thickness = 0.1;
+    let wall_width = window.width() / PIXELS_PER_METER - 2.0 * wall_inset;
+    let wall_height = window.height() / PIXELS_PER_METER - 2.0 * wall_inset;
+
+    commands
+        .spawn((SpatialBundle::default(), Name::new("Walls")))
+        .with_children(|parent| {
+            parent.spawn((
+                SpriteBundle {
+                    transform: Transform::from_xyz(-(wall_width - wall_thickness) / 2.0, 0.0, 0.0),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(wall_thickness, wall_height)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                RigidBody::Static,
+                Collider::cuboid(wall_thickness, wall_height),
+                Name::new("Left wall"),
+            ));
+            parent.spawn((
+                SpriteBundle {
+                    transform: Transform::from_xyz((wall_width - wall_thickness) / 2.0, 0.0, 0.0),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(wall_thickness, wall_height)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                RigidBody::Static,
+                Collider::cuboid(wall_thickness, wall_height),
+                Name::new("Right wall"),
+            ));
+            parent.spawn((
+                SpriteBundle {
+                    transform: Transform::from_xyz(0.0, -(wall_height - wall_thickness) / 2.0, 0.0),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(wall_width, wall_thickness)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                RigidBody::Static,
+                Collider::cuboid(wall_width, wall_thickness),
+                Name::new("Bottom wall"),
+            ));
+            parent.spawn((
+                SpriteBundle {
+                    transform: Transform::from_xyz(0.0, (wall_height - wall_thickness) / 2.0, 0.0),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::new(wall_width, wall_thickness)),
+                        ..default()
+                    },
+                    ..default()
+                },
+                RigidBody::Static,
+                Collider::cuboid(wall_width, wall_thickness),
+                Name::new("Top wall"),
+            ));
+        });
 }
 
 fn move_cursors(
@@ -326,6 +393,7 @@ struct PIDController {
     p: f32,
     i: f32,
     d: f32,
+    max_positional_error: f32,
     max_integral_error: f32,
     integral_error: Vec2,
     prev_error: Vec2,
@@ -347,7 +415,9 @@ fn apply_cursor_force(
         pd.integral_error += error * time.period.as_secs_f32();
         pd.integral_error = pd.integral_error.clamp_length_max(pd.max_integral_error);
         let d_error = (error - pd.prev_error) / time.period.as_secs_f32();
-        let u_pd = pd.p * error + pd.i * pd.integral_error + pd.d * d_error;
+        let u_pd = pd.p * error.clamp_length_max(pd.max_positional_error)
+            + pd.i * pd.integral_error
+            + pd.d * d_error;
 
         let applied_acceleration = u_pd / time.period.as_secs_f32();
         force.apply_force(mass.0 * applied_acceleration);
