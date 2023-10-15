@@ -1,24 +1,19 @@
 use bevy::{
     input::common_conditions::{input_just_pressed, input_toggle_active},
     prelude::*,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
+use rand::Rng;
 
 mod mischief;
 
 use mischief::{poll_events, MischiefEvent, MischiefEventData, MischiefPlugin};
 
 // Making a game with Bevy + Mischief
-// Specifically, a game where you control two ends of a rope with two mice
-// Candy falls from the top of the screen, and you have to catch it with the rope
-// You can move the rope ends independently, but you can't move them too far apart
-// You must deposit the candy in a receptacle on one side of the screen
-
-// Or... what if it's a mouth? Two-mouse pacman controls???
-// Could open and close the mouth (by moving cursors together and apart) to move forward,
-// and then turn left and right by moving both cursors left and right.
-// BONKERS controls lol
+// Specifically, a game where you control two ends of a rope with two mice.
+// You manipulate other objects with the rope.
 
 // First steps:
 // Make two virtual cursors that you can move around (done)
@@ -30,6 +25,18 @@ use mischief::{poll_events, MischiefEvent, MischiefEventData, MischiefPlugin};
 // Make a rope of bodies that dangles from the cursors (done)
 // Move the cursor with forces so it doesn't make the rope go crazy (done)
 // Make a single rope that connects the two cursors (done! finally!)
+
+// Okay, the basic platform is in place. Let's make a game!
+
+// Revised plan:
+// Two types of shapes fall from the top of the screen.
+// One type should go to the left; the other to the right; they can also fall straight through and be gone.
+// You get points for sorting correctly, lose points for sorting wrong, and miss out on points for letting them fall through.
+
+// Todo list:
+// Spawn a purple square and a green circle at the top of the screen. (done)
+// Spawn on a timer instead of at the start.
+// Randomize their params (size, position, velocity, etc.)
 
 const PIXELS_PER_METER: f32 = 100.0;
 
@@ -46,8 +53,12 @@ fn main() {
             toggle_os_cursor.run_if(input_just_pressed(KeyCode::Grave)),
         )
         .add_systems(Startup, (spawn_camera, toggle_os_cursor))
-        .add_systems(Startup, (spawn_walls, spawn_test_bodies))
+        .add_systems(Startup, spawn_walls)
         .add_systems(Startup, spawn_cursors)
+        .add_systems(
+            Startup,
+            (configure_shapes, apply_deferred, spawn_test_shapes).chain(),
+        )
         .add_systems(Update, bevy::window::close_on_esc)
         .add_systems(Update, attach_cursors)
         .add_systems(
@@ -274,21 +285,71 @@ fn spawn_rope(
     return (prev_id, prev_anchor);
 }
 
-fn spawn_test_bodies(mut commands: Commands) {
-    let positions = vec![Vec2::new(-1.5, 3.0), Vec2::new(1.5, 3.0)];
-    let body_size = 0.25;
-    for position in positions {
+#[derive(Component)]
+struct ShapeConfig {
+    mesh: Mesh2dHandle,
+    material: Handle<ColorMaterial>,
+    collider: Collider,
+}
+
+fn configure_shapes(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let default_size = 0.25;
+    commands.spawn((
+        ShapeConfig {
+            mesh: meshes
+                .add(
+                    shape::Quad {
+                        size: Vec2::splat(default_size),
+                        ..default()
+                    }
+                    .into(),
+                )
+                .into(),
+            material: materials.add(ColorMaterial::from(Color::PURPLE)),
+            collider: Collider::cuboid(default_size, default_size),
+        },
+        Name::new("SquareConfig"),
+    ));
+    commands.spawn((
+        ShapeConfig {
+            mesh: meshes
+                .add(
+                    shape::Circle {
+                        radius: default_size / 2.0,
+                        ..default()
+                    }
+                    .into(),
+                )
+                .into(),
+            material: materials.add(ColorMaterial::from(Color::GREEN)),
+            collider: Collider::ball(default_size / 2.0),
+        },
+        Name::new("CircleConfig"),
+    ));
+}
+
+fn spawn_test_shapes(mut commands: Commands, shape_configs: Query<&ShapeConfig>) {
+    let min_x = -1.5;
+    let max_x = 1.5;
+    let min_y = 2.5;
+    let max_y = 3.0;
+    let mut rng = rand::thread_rng();
+    for shape_config in shape_configs.iter() {
+        let x = rng.gen_range(min_x..max_x);
+        let y = rng.gen_range(min_y..max_y);
         commands.spawn((
-            SpriteBundle {
-                transform: Transform::from_xyz(position.x, position.y, 0.0),
-                sprite: Sprite {
-                    custom_size: Some(Vec2::splat(body_size)),
-                    ..default()
-                },
+            MaterialMesh2dBundle {
+                transform: Transform::from_xyz(x, y, 0.0),
+                mesh: shape_config.mesh.clone(),
+                material: shape_config.material.clone(),
                 ..default()
             },
             RigidBody::Dynamic,
-            Collider::cuboid(body_size, body_size),
+            shape_config.collider.clone(),
         ));
     }
 }
