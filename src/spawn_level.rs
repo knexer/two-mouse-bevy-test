@@ -6,6 +6,18 @@ use crate::{
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
 };
 
+pub const WIDTH: f32 = 16.0;
+pub const HEIGHT: f32 = 9.0;
+
+pub const SHAPE_SPAWN_REGION: Rect = Rect {
+    min: Vec2::new(-3.0, 5.0),
+    max: Vec2::new(3.0, 6.0),
+};
+pub const SHAPE_ALIVE_REGION: Rect = Rect {
+    min: Vec2::new(-WIDTH, -HEIGHT),
+    max: Vec2::new(WIDTH, HEIGHT),
+};
+
 pub fn spawn_level(
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
@@ -170,8 +182,6 @@ fn spawn_walls(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    const WIDTH: f32 = 16.0;
-    const HEIGHT: f32 = 9.0;
     const bottom: f32 = -HEIGHT / 2.0;
     const top: f32 = HEIGHT / 2.0;
     const left: f32 = -WIDTH / 2.0;

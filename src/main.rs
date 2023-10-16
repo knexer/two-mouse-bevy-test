@@ -10,6 +10,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
 use player::PlayerPlugin;
 use rand::Rng;
+use spawn_level::{SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
 
 mod mischief;
 mod path;
@@ -43,7 +44,7 @@ mod spawn_level;
 // Spawn on a timer instead of at the start. (done)
 // Randomize their params (size, position, velocity, etc.). (position done)
 // Split out some modules. (done)
-// Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain.
+// Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain. (done)
 // Pick a color palette.
 // Add a score counter for each side.
 
@@ -70,7 +71,7 @@ fn main() {
         )
         .add_systems(Startup, spawn_level::spawn_level)
         .add_systems(Startup, configure_shapes)
-        .add_systems(Update, spawn_shapes)
+        .add_systems(Update, (spawn_shapes, despawn_shapes))
         .add_systems(Update, bevy::window::close_on_esc)
         .run();
 }
@@ -103,12 +104,18 @@ fn spawn_camera(mut commands: Commands) {
     });
 }
 
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+enum Shape {
+    Square,
+    Circle,
+}
+
 #[derive(Component)]
 struct ShapeConfig {
     mesh: Mesh2dHandle,
     material: Handle<ColorMaterial>,
     collider: Collider,
-    timer: Timer,
+    shape: Shape,
 }
 
 fn configure_shapes(
@@ -130,7 +137,7 @@ fn configure_shapes(
                 .into(),
             material: materials.add(ColorMaterial::from(Color::PURPLE)),
             collider: Collider::cuboid(default_size, default_size),
-            timer: Timer::from_seconds(3.0, TimerMode::Once),
+            shape: Shape::Square,
         },
         Name::new("SquareConfig"),
     ));
@@ -147,42 +154,58 @@ fn configure_shapes(
                 .into(),
             material: materials.add(ColorMaterial::from(Color::GREEN)),
             collider: Collider::ball(default_size / 2.0),
-            timer: Timer::from_seconds(4.5, TimerMode::Once),
+            shape: Shape::Circle,
         },
         Name::new("CircleConfig"),
     ));
+    commands.insert_resource(ShapeTimer(Timer::from_seconds(2.0, TimerMode::Once)));
 }
+
+#[derive(Resource)]
+struct ShapeTimer(Timer);
 
 fn spawn_shapes(
     mut commands: Commands,
     mut shape_configs: Query<&mut ShapeConfig>,
+    mut shape_timer: ResMut<ShapeTimer>,
     time: Res<Time>,
 ) {
-    let min_x = -1.5;
-    let max_x = 1.5;
-    let min_y = 2.5;
-    let max_y = 3.0;
+    if !shape_timer
+        .0
+        .tick(Duration::from_secs_f32(time.delta_seconds()))
+        .just_finished()
+    {
+        return;
+    }
     let mut rng = rand::thread_rng();
-    for mut shape_config in shape_configs.iter_mut() {
-        if !shape_config
-            .timer
-            .tick(Duration::from_secs_f32(time.delta_seconds()))
-            .just_finished()
-        {
-            continue;
+    // Pick a random shape config
+    let shape_configs = shape_configs.iter_mut().collect::<Vec<_>>();
+    let shape_config = &shape_configs[rng.gen_range(0..shape_configs.len())];
+
+    let x = rng.gen_range(SHAPE_SPAWN_REGION.min.x..SHAPE_SPAWN_REGION.max.x);
+    let y = rng.gen_range(SHAPE_SPAWN_REGION.min.y..SHAPE_SPAWN_REGION.max.y);
+    commands.spawn((
+        MaterialMesh2dBundle {
+            transform: Transform::from_xyz(x, y, 0.0),
+            mesh: shape_config.mesh.clone(),
+            material: shape_config.material.clone(),
+            ..default()
+        },
+        RigidBody::Dynamic,
+        shape_config.collider.clone(),
+        shape_config.shape.clone(),
+    ));
+
+    shape_timer
+        .0
+        .set_duration(Duration::from_secs_f32(rng.gen_range(1.0..3.0)));
+    shape_timer.0.reset();
+}
+
+fn despawn_shapes(mut commands: Commands, mut shapes: Query<(Entity, &Transform), With<Shape>>) {
+    for (entity, transform) in shapes.iter_mut() {
+        if !SHAPE_ALIVE_REGION.contains(transform.translation.truncate()) {
+            commands.entity(entity).despawn_recursive();
         }
-        let x = rng.gen_range(min_x..max_x);
-        let y = rng.gen_range(min_y..max_y);
-        commands.spawn((
-            MaterialMesh2dBundle {
-                transform: Transform::from_xyz(x, y, 0.0),
-                mesh: shape_config.mesh.clone(),
-                material: shape_config.material.clone(),
-                ..default()
-            },
-            RigidBody::Dynamic,
-            shape_config.collider.clone(),
-        ));
-        shape_config.timer = Timer::from_seconds(3.0, TimerMode::Once);
     }
 }
