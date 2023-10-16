@@ -4,6 +4,7 @@ use bevy::{
     input::common_conditions::{input_just_pressed, input_toggle_active},
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    window::WindowResolution,
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
@@ -63,12 +64,20 @@ fn main() {
             Update,
             toggle_os_cursor.run_if(input_just_pressed(KeyCode::Grave)),
         )
-        .add_systems(Startup, (spawn_camera, toggle_os_cursor))
+        .add_systems(
+            Startup,
+            (size_window, spawn_camera, toggle_os_cursor).chain(),
+        )
         .add_systems(Startup, spawn_level::spawn_level)
         .add_systems(Startup, configure_shapes)
         .add_systems(Update, spawn_shapes)
         .add_systems(Update, bevy::window::close_on_esc)
         .run();
+}
+
+fn size_window(mut windows: Query<&mut Window>) {
+    let mut window = windows.single_mut();
+    window.resolution = WindowResolution::new(1600.0, 900.0);
 }
 
 fn toggle_os_cursor(mut windows: Query<&mut Window>) {
