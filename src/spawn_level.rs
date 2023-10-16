@@ -28,9 +28,11 @@ pub fn spawn_level(
 }
 
 #[derive(PhysicsLayer)]
-enum Layer {
+pub enum Layer {
     Rope,
-    Other,
+    Level,
+    Shapes,
+    PlayerBlocker,
 }
 
 fn spawn_cursors(mut commands: &mut Commands) {
@@ -95,7 +97,10 @@ where
             ExternalForce::default().with_persistence(false),
             LockedAxes::ROTATION_LOCKED,
             Collider::cuboid(cursor_size, cursor_size),
-            CollisionLayers::new([Layer::Rope], [Layer::Other]),
+            CollisionLayers::new(
+                [Layer::Rope],
+                [Layer::Level, Layer::Shapes, Layer::PlayerBlocker],
+            ),
             Cursor(None),
             T::default(),
             Name::new(name.to_owned()),
@@ -155,7 +160,10 @@ fn spawn_rope(
                 },
                 RigidBody::Dynamic,
                 Collider::cuboid(body_length, THICKNESS),
-                CollisionLayers::new([Layer::Rope], [Layer::Other]),
+                CollisionLayers::new(
+                    [Layer::Rope],
+                    [Layer::Level, Layer::Shapes, Layer::PlayerBlocker],
+                ),
                 Name::new(format!("Rope segment {}", i)),
             ))
             .id();
@@ -225,7 +233,7 @@ fn spawn_walls(
             material: materials.add(ColorMaterial::from(Color::PURPLE)),
             ..default()
         },
-        CollisionLayers::new([Layer::Other], [Layer::Rope, Layer::Other]),
+        CollisionLayers::new([Layer::Level], [Layer::Rope, Layer::Shapes]),
     ));
 
     let mut right_side = Path::new();
@@ -280,6 +288,51 @@ fn spawn_walls(
             material: materials.add(ColorMaterial::from(Color::GREEN)),
             ..default()
         },
-        CollisionLayers::new([Layer::Other], [Layer::Rope, Layer::Other]),
+        CollisionLayers::new([Layer::Level], [Layer::Rope, Layer::Shapes]),
+    ));
+
+    // Prevent the player from passing through the inlet.
+    let block_thickness = 0.2;
+    commands.spawn((
+        Name::new("InletBlock"),
+        RigidBody::Static,
+        Collider::cuboid(inlet_width, block_thickness),
+        MaterialMesh2dBundle {
+            transform: Transform::from_xyz(0.0, top - outer_wall_thickness / 2.0, 0.0),
+            mesh: meshes
+                .add(
+                    shape::Quad {
+                        size: Vec2::new(inlet_width, block_thickness),
+                        ..default()
+                    }
+                    .into(),
+                )
+                .into(),
+            material: materials.add(ColorMaterial::from(Color::RED)),
+            ..default()
+        },
+        CollisionLayers::new([Layer::PlayerBlocker], [Layer::Rope]),
+    ));
+
+    // Prevent the player from passing through the drain.
+    commands.spawn((
+        Name::new("DrainBlock"),
+        RigidBody::Static,
+        Collider::cuboid(drain_width, block_thickness),
+        MaterialMesh2dBundle {
+            transform: Transform::from_xyz(0.0, bottom + outer_wall_thickness / 2.0, 0.0),
+            mesh: meshes
+                .add(
+                    shape::Quad {
+                        size: Vec2::new(drain_width, block_thickness),
+                        ..default()
+                    }
+                    .into(),
+                )
+                .into(),
+            material: materials.add(ColorMaterial::from(Color::RED)),
+            ..default()
+        },
+        CollisionLayers::new([Layer::PlayerBlocker], [Layer::Rope]),
     ));
 }

@@ -10,7 +10,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
 use player::PlayerPlugin;
 use rand::Rng;
-use spawn_level::{SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
+use spawn_level::{Layer, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
 
 mod mischief;
 mod path;
@@ -45,7 +45,7 @@ mod spawn_level;
 // Randomize their params (size, position, velocity, etc.). (position done)
 // Split out some modules. (done)
 // Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain. (done)
-// Block the player from moving the rope outside the level.
+// Block the player from moving the rope outside the level. (done)
 // Pick a nice color palette and recolor everything with it.
 // Round the rest of the corners on the right side of the level.
 // Differentiate left vs right cursors visually.
@@ -111,6 +111,15 @@ fn spawn_camera(mut commands: Commands) {
 enum Shape {
     Square,
     Circle,
+}
+
+impl std::fmt::Display for Shape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Shape::Square => write!(f, "Square"),
+            Shape::Circle => write!(f, "Circle"),
+        }
+    }
 }
 
 #[derive(Component)]
@@ -197,6 +206,8 @@ fn spawn_shapes(
         RigidBody::Dynamic,
         shape_config.collider.clone(),
         shape_config.shape.clone(),
+        CollisionLayers::new([Layer::Shapes], [Layer::Rope, Layer::Level, Layer::Shapes]),
+        Name::new(shape_config.shape.to_string()),
     ));
 
     shape_timer
