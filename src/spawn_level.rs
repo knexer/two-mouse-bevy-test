@@ -197,7 +197,7 @@ fn spawn_walls(
 
     let drain_width: f32 = 2.0;
     let playfield_width: f32 = 12.0;
-    let target_bottom: f32 = 1.0;
+    let target_bottom: f32 = 0.0;
     let playfield_wall_thickness: f32 = 0.4;
     let bin_bottom: f32 = bottom + 0.4;
     let inlet_width: f32 = 8.0;
@@ -219,6 +219,7 @@ fn spawn_walls(
     ));
     left_side.line_to(Vec2::new(left + outer_wall_thickness, bin_bottom));
     left_side.line_to(Vec2::new(left + outer_wall_thickness, top - 3.0));
+    left_side.line_to(Vec2::new(-inlet_width / 2.0, top - outer_wall_thickness));
     left_side.line_to(Vec2::new(-inlet_width / 2.0, top));
     left_side.line_to(Vec2::new(left, top));
     left_side.close();
@@ -273,6 +274,7 @@ fn spawn_walls(
         WindDirection::CounterClockwise,
     );
     right_side.line_to(Vec2::new(right - outer_wall_thickness, top - 3.0));
+    right_side.line_to(Vec2::new(inlet_width / 2.0, top - outer_wall_thickness));
     right_side.line_to(Vec2::new(inlet_width / 2.0, top));
     right_side.line_to(Vec2::new(right, top));
     right_side.close();
