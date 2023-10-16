@@ -45,12 +45,15 @@ mod spawn_level;
 // Randomize their params (size, position, velocity, etc.). (position done)
 // Split out some modules. (done)
 // Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain. (done)
-// Pick a color palette.
+// Block the player from moving the rope outside the level.
+// Pick a nice color palette and recolor everything with it.
+// Round the rest of the corners on the right side of the level.
+// Differentiate left vs right cursors visually.
 // Add a score counter for each side.
+// Wait to start the game until both cursors are assigned.
 
 // Bugs:
-// Sometimes the game freezes, maybe physics related? Seems to happen when physics objects are overlapping.
-// Actually I bet it's a fixed update death spiral. Classic. Maybe reducing the substep count will help.
+// - Sometimes the game freezes, maybe physics related? Happens sometimes at game start, or when things spawn on top of each other.
 
 const PIXELS_PER_METER: f32 = 100.0;
 

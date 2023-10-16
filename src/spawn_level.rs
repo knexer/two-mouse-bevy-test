@@ -182,18 +182,18 @@ fn spawn_walls(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    const bottom: f32 = -HEIGHT / 2.0;
-    const top: f32 = HEIGHT / 2.0;
-    const left: f32 = -WIDTH / 2.0;
-    const right: f32 = WIDTH / 2.0;
+    let bottom: f32 = -HEIGHT / 2.0;
+    let top: f32 = HEIGHT / 2.0;
+    let left: f32 = -WIDTH / 2.0;
+    let right: f32 = WIDTH / 2.0;
 
-    const drain_width: f32 = 2.0;
-    const playfield_width: f32 = 12.0;
-    const target_bottom: f32 = 1.0;
-    const playfield_wall_thickness: f32 = 0.4;
-    const bin_bottom: f32 = bottom + 0.4;
-    const inlet_width: f32 = 8.0;
-    const outer_wall_thickness: f32 = 0.25;
+    let drain_width: f32 = 2.0;
+    let playfield_width: f32 = 12.0;
+    let target_bottom: f32 = 1.0;
+    let playfield_wall_thickness: f32 = 0.4;
+    let bin_bottom: f32 = bottom + 0.4;
+    let inlet_width: f32 = 8.0;
+    let outer_wall_thickness: f32 = 0.25;
 
     let mut left_side = Path::new();
     left_side.move_to(Vec2::new(left, bottom));

@@ -69,12 +69,12 @@ impl Path {
     }
 
     pub fn build_collider(&self) -> Collider {
-        let indices_u32 = self
-            .indices
+        let triangles_u32 = self
+            .triangulate()
             .iter()
-            .map(|[a, b]| [*a as u32, *b as u32])
+            .map(|[a, b, c]| [*a as u32, *b as u32, *c as u32])
             .collect::<Vec<_>>();
-        Collider::polyline(self.vertices.clone(), Some(indices_u32))
+        Collider::trimesh(self.vertices.clone(), triangles_u32)
     }
 
     pub fn build_polyline_mesh(&self) -> Mesh {
@@ -97,10 +97,28 @@ impl Path {
     }
 
     pub fn build_triangle_mesh(&self) -> Mesh {
+        let triangles = self.triangulate();
+
+        let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+        mesh.insert_attribute(
+            Mesh::ATTRIBUTE_POSITION,
+            triangles
+                .iter()
+                .flatten()
+                .map(|i| self.vertices[*i])
+                // Must convert to Vec3 because Mesh::ATTRIBUTE_POSITION is Vec3.
+                .map(|v| Vec3::new(v.x, v.y, 0.0))
+                .collect::<Vec<_>>(),
+        );
+
+        mesh
+    }
+
+    fn triangulate(&self) -> Vec<[usize; 3]> {
         // O(n^3) algorithm for triangulating a polygon.
         // https://en.wikipedia.org/wiki/Polygon_triangulation#Ear_clipping_method
         // Could be optimized to O(n^2) by more intelligently searching for ears.
-        let mut mesh_indices: Vec<usize> = Vec::new();
+        let mut triangles: Vec<[usize; 3]> = Vec::new();
         let mut remaining_vertex_indices = self
             .indices
             .iter()
@@ -123,9 +141,11 @@ impl Path {
                     remaining_vertex_indices[next_index_index],
                 ) {
                     // Emit a triangle: (vertex.prev, ear, vertex.next)
-                    mesh_indices.push(remaining_vertex_indices[prev_index_index]);
-                    mesh_indices.push(remaining_vertex_indices[index_index]);
-                    mesh_indices.push(remaining_vertex_indices[next_index_index]);
+                    triangles.push([
+                        remaining_vertex_indices[prev_index_index],
+                        remaining_vertex_indices[index_index],
+                        remaining_vertex_indices[next_index_index],
+                    ]);
                     // Delete ear from the vertex list, leaving us with a smaller polygon.
                     remaining_vertex_indices.remove(index_index);
                     found_ear = true;
@@ -138,18 +158,7 @@ impl Path {
             );
         }
 
-        let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
-        mesh.insert_attribute(
-            Mesh::ATTRIBUTE_POSITION,
-            mesh_indices
-                .iter()
-                .map(|i| self.vertices[*i])
-                // Must convert to Vec3 because Mesh::ATTRIBUTE_POSITION is Vec3.
-                .map(|v| Vec3::new(v.x, v.y, 0.0))
-                .collect::<Vec<_>>(),
-        );
-
-        mesh
+        return triangles;
     }
 }
 
