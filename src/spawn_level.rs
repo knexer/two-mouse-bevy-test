@@ -2,20 +2,17 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_xpbd_2d::prelude::*;
 
 use crate::{
-    path::Path,
+    path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
-    PIXELS_PER_METER,
 };
 
 pub fn spawn_level(
     mut commands: Commands,
-    windows: Query<&Window>,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<ColorMaterial>>,
 ) {
     spawn_cursors(&mut commands);
-    spawn_walls(&mut commands, windows);
-    spawn_walls_v2(&mut commands, meshes, materials);
+    spawn_walls(&mut commands, meshes, materials);
 }
 
 #[derive(PhysicsLayer)]
@@ -168,99 +165,109 @@ fn spawn_rope(
     return (prev_id, prev_anchor);
 }
 
-fn spawn_walls(commands: &mut Commands, windows: Query<&Window>) {
-    let window = windows.single();
-    let wall_inset = 0.1;
-    let wall_thickness = 0.1;
-    let wall_width = window.width() / PIXELS_PER_METER - 2.0 * wall_inset;
-    let wall_height = window.height() / PIXELS_PER_METER - 2.0 * wall_inset;
-
-    commands
-        .spawn((SpatialBundle::default(), Name::new("Walls")))
-        .with_children(|parent| {
-            parent.spawn((
-                SpriteBundle {
-                    transform: Transform::from_xyz(-(wall_width - wall_thickness) / 2.0, 0.0, 0.0),
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(wall_thickness, wall_height)),
-                        ..default()
-                    },
-                    ..default()
-                },
-                RigidBody::Static,
-                Collider::cuboid(wall_thickness, wall_height),
-                Name::new("Left wall"),
-            ));
-            parent.spawn((
-                SpriteBundle {
-                    transform: Transform::from_xyz((wall_width - wall_thickness) / 2.0, 0.0, 0.0),
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(wall_thickness, wall_height)),
-                        ..default()
-                    },
-                    ..default()
-                },
-                RigidBody::Static,
-                Collider::cuboid(wall_thickness, wall_height),
-                Name::new("Right wall"),
-            ));
-            parent.spawn((
-                SpriteBundle {
-                    transform: Transform::from_xyz(0.0, -(wall_height - wall_thickness) / 2.0, 0.0),
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(wall_width, wall_thickness)),
-                        ..default()
-                    },
-                    ..default()
-                },
-                RigidBody::Static,
-                Collider::cuboid(wall_width, wall_thickness),
-                Name::new("Bottom wall"),
-            ));
-            parent.spawn((
-                SpriteBundle {
-                    transform: Transform::from_xyz(0.0, (wall_height - wall_thickness) / 2.0, 0.0),
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(wall_width, wall_thickness)),
-                        ..default()
-                    },
-                    ..default()
-                },
-                RigidBody::Static,
-                Collider::cuboid(wall_width, wall_thickness),
-                Name::new("Top wall"),
-            ));
-        });
-}
-
-fn spawn_walls_v2(
+fn spawn_walls(
     commands: &mut Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     const WIDTH: f32 = 16.0;
     const HEIGHT: f32 = 9.0;
+    const bottom: f32 = -HEIGHT / 2.0;
+    const top: f32 = HEIGHT / 2.0;
+    const left: f32 = -WIDTH / 2.0;
+    const right: f32 = WIDTH / 2.0;
 
-    let mut path = Path::new();
-    path.move_to(Vec2::new(0.0, 0.0));
-    path.line_to(Vec2::new(0.0, 1.0));
-    path.line_to(Vec2::new(0.5, 1.0));
-    // path.line_to(Vec2::new(0.5, 0.5));
-    // path.line_to(Vec2::new(1.0, 0.5));
-    // path.line_to(Vec2::new(1.0, 0.0));
-    path.arc_to(Vec2::new(1.0, 0.5), Vec2::new(0.5, 0.5), 10);
-    path.arc_to(Vec2::new(0.5, 0.0), Vec2::new(1.0, 0.0), 10);
-    path.close();
-    path.reverse();
+    const drain_width: f32 = 2.0;
+    const playfield_width: f32 = 12.0;
+    const target_bottom: f32 = 1.0;
+    const playfield_wall_thickness: f32 = 0.4;
+    const bin_bottom: f32 = bottom + 0.4;
+    const inlet_width: f32 = 8.0;
+    const outer_wall_thickness: f32 = 0.25;
+
+    let mut left_side = Path::new();
+    left_side.move_to(Vec2::new(left, bottom));
+    left_side.line_to(Vec2::new(-drain_width / 2.0, bottom));
+    left_side.line_to(Vec2::new(-drain_width / 2.0, bottom + outer_wall_thickness));
+    left_side.line_to(Vec2::new(-playfield_width / 2.0, bottom + 1.0));
+    left_side.line_to(Vec2::new(-playfield_width / 2.0, target_bottom));
+    left_side.line_to(Vec2::new(
+        -playfield_width / 2.0 - playfield_wall_thickness,
+        target_bottom,
+    ));
+    left_side.line_to(Vec2::new(
+        -playfield_width / 2.0 - playfield_wall_thickness,
+        bin_bottom,
+    ));
+    left_side.line_to(Vec2::new(left + outer_wall_thickness, bin_bottom));
+    left_side.line_to(Vec2::new(left + outer_wall_thickness, top - 3.0));
+    left_side.line_to(Vec2::new(-inlet_width / 2.0, top));
+    left_side.line_to(Vec2::new(left, top));
+    left_side.close();
 
     commands.spawn((
-        Name::new("TestShape"),
+        Name::new("LeftWall"),
         RigidBody::Static,
-        path.build_collider(),
+        left_side.build_collider(),
         MaterialMesh2dBundle {
-            transform: Transform::from_xyz(2.0, -2.0, 0.0),
-            mesh: meshes.add(path.build_triangle_mesh()).into(),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0),
+            mesh: meshes.add(left_side.build_triangle_mesh()).into(),
             material: materials.add(ColorMaterial::from(Color::PURPLE)),
+            ..default()
+        },
+        CollisionLayers::new([Layer::Other], [Layer::Rope, Layer::Other]),
+    ));
+
+    let mut right_side = Path::new();
+    right_side.move_to(Vec2::new(right, bottom));
+    right_side.line_to(Vec2::new(drain_width / 2.0, bottom));
+    right_side.line_to(Vec2::new(drain_width / 2.0, bottom + outer_wall_thickness));
+    right_side.line_to(Vec2::new(playfield_width / 2.0, bottom + 1.0));
+    right_side.line_to(Vec2::new(
+        playfield_width / 2.0,
+        target_bottom - playfield_wall_thickness / 2.0,
+    ));
+    right_side.arc_to(
+        Vec2::new(
+            playfield_width / 2.0 + playfield_wall_thickness,
+            target_bottom - playfield_wall_thickness / 2.0,
+        ),
+        Vec2::new(
+            playfield_width / 2.0 + playfield_wall_thickness / 2.0,
+            target_bottom - playfield_wall_thickness / 2.0,
+        ),
+        10,
+        WindDirection::Clockwise,
+    );
+    let bin_width =
+        (WIDTH - playfield_width) / 2.0 - playfield_wall_thickness - outer_wall_thickness;
+    right_side.line_to(Vec2::new(
+        playfield_width / 2.0 + playfield_wall_thickness,
+        bin_bottom + bin_width / 2.0,
+    ));
+    right_side.arc_to(
+        Vec2::new(right - outer_wall_thickness, bin_bottom + bin_width / 2.0),
+        Vec2::new(
+            playfield_width / 2.0 + playfield_wall_thickness + bin_width / 2.0,
+            bin_bottom + bin_width / 2.0,
+        ),
+        10,
+        WindDirection::CounterClockwise,
+    );
+    right_side.line_to(Vec2::new(right - outer_wall_thickness, top - 3.0));
+    right_side.line_to(Vec2::new(inlet_width / 2.0, top));
+    right_side.line_to(Vec2::new(right, top));
+    right_side.close();
+    right_side.reverse_winding_order();
+
+    commands.spawn((
+        Name::new("RightWall"),
+        RigidBody::Static,
+        right_side.build_collider(),
+        MaterialMesh2dBundle {
+            transform: Transform::from_xyz(0.0, 0.0, 0.0),
+            mesh: meshes.add(right_side.build_triangle_mesh()).into(),
+            material: materials.add(ColorMaterial::from(Color::GREEN)),
             ..default()
         },
         CollisionLayers::new([Layer::Other], [Layer::Rope, Layer::Other]),

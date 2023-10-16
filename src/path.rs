@@ -6,6 +6,11 @@ pub struct Path {
     pub indices: Vec<[usize; 2]>,
 }
 
+pub enum WindDirection {
+    Clockwise,
+    CounterClockwise,
+}
+
 impl Path {
     pub fn new() -> Self {
         Self {
@@ -24,12 +29,21 @@ impl Path {
         self.indices.push([index - 1, index]);
     }
 
-    pub fn arc_to(&mut self, end_pos: Vec2, arc_center: Vec2, num_segments: u32) {
+    pub fn arc_to(
+        &mut self,
+        end_pos: Vec2,
+        arc_center: Vec2,
+        num_segments: u32,
+        direction: WindDirection,
+    ) {
         let start_pos = self.vertices.last().unwrap().clone();
         let radius = (start_pos - arc_center).length();
         let start_angle = f32::atan2(start_pos.y - arc_center.y, start_pos.x - arc_center.x);
         let end_angle = f32::atan2(end_pos.y - arc_center.y, end_pos.x - arc_center.x);
-        let sweep_angle = end_angle - start_angle;
+        let sweep_angle = match direction {
+            WindDirection::Clockwise => end_angle - start_angle,
+            WindDirection::CounterClockwise => start_angle - end_angle,
+        };
         let angle_step = sweep_angle / num_segments as f32;
 
         for i in 1..=num_segments {
@@ -47,8 +61,7 @@ impl Path {
         self.indices.push([index - 1, 0]);
     }
 
-    // Reverse the direction and order of the lines (i.e. reverse winding order).
-    pub fn reverse(&mut self) {
+    pub fn reverse_winding_order(&mut self) {
         self.indices.reverse();
         for index in self.indices.iter_mut() {
             index.reverse();
@@ -98,31 +111,31 @@ impl Path {
         while remaining_vertex_indices.len() >= 3 {
             // Find and remove one ear.
             let mut found_ear = false;
-            for i in 0..remaining_vertex_indices.len() {
-                let prev_i =
-                    (i + remaining_vertex_indices.len() - 1) % remaining_vertex_indices.len();
-                let next_i = (i + 1) % remaining_vertex_indices.len();
+            for index_index in 0..remaining_vertex_indices.len() {
+                let prev_index_index = (index_index + remaining_vertex_indices.len() - 1)
+                    % remaining_vertex_indices.len();
+                let next_index_index = (index_index + 1) % remaining_vertex_indices.len();
                 // O(n). Could be cached but would have to invalidate it when removing adjacent vertices.
                 if is_ear(
                     self,
-                    remaining_vertex_indices[i],
-                    remaining_vertex_indices[prev_i],
-                    remaining_vertex_indices[next_i],
+                    remaining_vertex_indices[index_index],
+                    remaining_vertex_indices[prev_index_index],
+                    remaining_vertex_indices[next_index_index],
                 ) {
                     // Emit a triangle: (vertex.prev, ear, vertex.next)
-                    let a = remaining_vertex_indices[prev_i];
-                    let b = remaining_vertex_indices[i];
-                    let c = remaining_vertex_indices[next_i];
-                    mesh_indices.push(a);
-                    mesh_indices.push(b);
-                    mesh_indices.push(c);
-                    // Delete it from the vertex list.
-                    remaining_vertex_indices.remove(i);
+                    mesh_indices.push(remaining_vertex_indices[prev_index_index]);
+                    mesh_indices.push(remaining_vertex_indices[index_index]);
+                    mesh_indices.push(remaining_vertex_indices[next_index_index]);
+                    // Delete ear from the vertex list, leaving us with a smaller polygon.
+                    remaining_vertex_indices.remove(index_index);
                     found_ear = true;
                     break;
                 }
             }
-            assert!(found_ear);
+            assert!(
+                found_ear,
+                "Failed to find an ear, is the polygon self-intersecting?"
+            );
         }
 
         let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
@@ -141,43 +154,29 @@ impl Path {
 }
 
 fn is_ear(path: &Path, ear: usize, prev: usize, next: usize) -> bool {
-    // Check if any vertices in path are contained in the triangle (prev, ear, next).
-    // If so, return false.
-    // Otherwise, return true.
-
     let ear_pos = path.vertices[ear];
     let prev_pos = path.vertices[prev];
     let next_pos = path.vertices[next];
 
-    println!("Checking ear: {} {} {}", prev, ear, next);
-    println!("{} {} {}", prev_pos, ear_pos, next_pos);
+    // Verify that the triangle is counter-clockwise oriented (i.e. is inside the polygon, a 'front face').
+    if sign(prev_pos, ear_pos, next_pos) <= 0.0 {
+        return false;
+    }
 
+    // Verify there are no other vertices inside the triangle.
     for i in 0..path.vertices.len() {
         if i == ear || i == prev || i == next {
             continue;
         }
 
         let pos = path.vertices[i];
-        println!("{} {}", i, pos);
         if is_point_in_triangle(pos, prev_pos, ear_pos, next_pos) {
-            println!("Point {} is in triangle", i);
             return false;
         }
     }
 
     return true;
 }
-
-// fn is_point_in_triangle(point: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool {
-//     // https://stackoverflow.com/a/2049593/5434860
-//     let area = 0.5 * (-b.y * c.x + a.y * (-b.x + c.x) + a.x * (b.y - c.y) + b.x * c.y);
-//     let s = 1.0 / (2.0 * area)
-//         * (a.y * c.x - a.x * c.y + (c.y - a.y) * point.x + (a.x - c.x) * point.y);
-//     let t = 1.0 / (2.0 * area)
-//         * (a.x * b.y - a.y * b.x + (a.y - b.y) * point.x + (b.x - a.x) * point.y);
-
-//     return s > 0.0 && t > 0.0 && 1.0 - s - t > 0.0;
-// }
 
 fn sign(p1: Vec2, p2: Vec2, p3: Vec2) -> f32 {
     return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
@@ -188,14 +187,22 @@ fn is_point_in_triangle(point: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool {
     let d2 = sign(point, b, c);
     let d3 = sign(point, c, a);
 
-    println!("{} {} {}", d1, d2, d3);
-
     let has_neg = (d1 < 0.0) || (d2 < 0.0) || (d3 < 0.0);
     let has_pos = (d1 > 0.0) || (d2 > 0.0) || (d3 > 0.0);
-    let has_eq = (d1 == 0.0) || (d2 == 0.0) || (d3 == 0.0);
+    let all_eq = (d1 == 0.0) && (d2 == 0.0) && (d3 == 0.0);
 
-    println!("{} {} {}", has_neg, has_pos, has_eq);
-    println!("Returning {}", !has_eq && !(has_neg && has_pos));
+    // Point is definitely outside the triangle if it's on negative side of one edge and positive
+    // side of another edge.
+    if has_neg && has_pos {
+        return false;
+    }
 
-    return has_eq || !(has_neg && has_pos);
+    // Point is definitely inside the triangle there's at least one edge it isn't collinear with.
+    if !all_eq {
+        return true;
+    }
+
+    // If we're here, we know the point is collinear with all three edges.
+    // For now, just return false.
+    return false;
 }
