@@ -12,6 +12,8 @@ use player::PlayerPlugin;
 use rand::Rng;
 use spawn_level::{Layer, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
 
+use crate::spawn_level::{LEFT_SCORE_REGION, RIGHT_SCORE_REGION};
+
 mod mischief;
 mod path;
 mod player;
@@ -39,21 +41,29 @@ mod spawn_level;
 // One type should go to the left; the other to the right; they can also fall straight through and be gone.
 // You get points for sorting correctly, lose points for sorting wrong, and miss out on points for letting them fall through.
 
-// Todo list:
+// MVP:
 // Spawn a purple square and a green circle at the top of the screen. (done)
 // Spawn on a timer instead of at the start. (done)
 // Randomize their params (size, position, velocity, etc.). (position done)
 // Split out some modules. (done)
 // Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain. (done)
 // Block the player from moving the rope outside the level. (done)
+// Add a score counter for each side. (done)
+// Wait to start the game until both cursors are assigned.
+// Add an end condition. A timer? A score threshold? A number of shapes?
+
+// Polish:
+// Sound effects!
+// Show a title screen while waiting for the player to attach the cursors.
+// Increase intensity over time.
+// Spawn shapes in more interesting ways. Randomized params, spawn in waves, spawn in patterns.
+// Differentiate left vs right cursors visually.
 // Pick a nice color palette and recolor everything with it.
 // Round the rest of the corners on the right side of the level.
-// Differentiate left vs right cursors visually.
-// Add a score counter for each side.
-// Wait to start the game until both cursors are assigned.
 
 // Bugs:
 // - Sometimes the game freezes, maybe physics related? Happens sometimes at game start, or when things spawn on top of each other.
+// - Window resolution doesn't seem to be working as I expect it to.
 
 const PIXELS_PER_METER: f32 = 100.0;
 
@@ -75,6 +85,8 @@ fn main() {
         .add_systems(Startup, spawn_level::spawn_level)
         .add_systems(Startup, configure_shapes)
         .add_systems(Update, (spawn_shapes, despawn_shapes))
+        .insert_resource(Score::default())
+        .add_systems(Update, (update_score, display_score).chain())
         .add_systems(Update, bevy::window::close_on_esc)
         .run();
 }
@@ -164,7 +176,7 @@ fn configure_shapes(
                     .into(),
                 )
                 .into(),
-            material: materials.add(ColorMaterial::from(Color::GREEN)),
+            material: materials.add(ColorMaterial::from(Color::DARK_GREEN)),
             collider: Collider::ball(default_size / 2.0),
             shape: Shape::Circle,
         },
@@ -221,5 +233,44 @@ fn despawn_shapes(mut commands: Commands, mut shapes: Query<(Entity, &Transform)
         if !SHAPE_ALIVE_REGION.contains(transform.translation.truncate()) {
             commands.entity(entity).despawn_recursive();
         }
+    }
+}
+
+#[derive(Resource, Default)]
+struct Score {
+    left: i32,
+    right: i32,
+}
+
+fn update_score(mut score: ResMut<Score>, shapes: Query<(&Transform, &Shape)>) {
+    score.left = 0;
+    score.right = 0;
+    for (transform, shape) in shapes.iter() {
+        if LEFT_SCORE_REGION.contains(transform.translation.truncate()) {
+            match shape {
+                Shape::Square => score.left += 1,
+                Shape::Circle => score.left -= 1,
+            }
+        } else if RIGHT_SCORE_REGION.contains(transform.translation.truncate()) {
+            match shape {
+                Shape::Square => score.right -= 1,
+                Shape::Circle => score.right += 1,
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+pub enum ScoreDisplay {
+    Left,
+    Right,
+}
+
+fn display_score(score: Res<Score>, mut displays: Query<(&mut Text, &ScoreDisplay)>) {
+    for (mut text, display) in displays.iter_mut() {
+        text.sections[0].value = match display {
+            ScoreDisplay::Left => format!("{}", score.left),
+            ScoreDisplay::Right => format!("{}", score.right),
+        };
     }
 }

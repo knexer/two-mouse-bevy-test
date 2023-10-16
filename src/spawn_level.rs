@@ -4,10 +4,16 @@ use bevy_xpbd_2d::prelude::*;
 use crate::{
     path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
+    ScoreDisplay,
 };
 
 pub const WIDTH: f32 = 16.0;
 pub const HEIGHT: f32 = 9.0;
+
+const BOTTOM: f32 = -HEIGHT / 2.0;
+const TOP: f32 = HEIGHT / 2.0;
+const LEFT: f32 = -WIDTH / 2.0;
+const RIGHT: f32 = WIDTH / 2.0;
 
 pub const SHAPE_SPAWN_REGION: Rect = Rect {
     min: Vec2::new(-3.0, 5.0),
@@ -18,13 +24,30 @@ pub const SHAPE_ALIVE_REGION: Rect = Rect {
     max: Vec2::new(WIDTH, HEIGHT),
 };
 
+const OUTER_WALL_THICKNESS: f32 = 0.25;
+
+const BIN_WIDTH: f32 = 1.35;
+const BIN_BOTTOM: f32 = BOTTOM + 0.4;
+const BIN_TOP: f32 = 0.0;
+pub const LEFT_SCORE_REGION: Rect = Rect {
+    min: Vec2::new(LEFT + OUTER_WALL_THICKNESS, BIN_BOTTOM),
+    max: Vec2::new(LEFT + OUTER_WALL_THICKNESS + BIN_WIDTH, BIN_TOP),
+};
+
+pub const RIGHT_SCORE_REGION: Rect = Rect {
+    min: Vec2::new(RIGHT - OUTER_WALL_THICKNESS - BIN_WIDTH, BIN_BOTTOM),
+    max: Vec2::new(RIGHT - OUTER_WALL_THICKNESS, BIN_TOP),
+};
+
 pub fn spawn_level(
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<ColorMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     spawn_cursors(&mut commands);
     spawn_walls(&mut commands, meshes, materials);
+    spawn_score_displays(&mut commands, asset_server);
 }
 
 #[derive(PhysicsLayer)]
@@ -190,38 +213,31 @@ fn spawn_walls(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let bottom: f32 = -HEIGHT / 2.0;
-    let top: f32 = HEIGHT / 2.0;
-    let left: f32 = -WIDTH / 2.0;
-    let right: f32 = WIDTH / 2.0;
-
     let drain_width: f32 = 2.0;
-    let playfield_width: f32 = 12.0;
-    let target_bottom: f32 = 0.0;
-    let playfield_wall_thickness: f32 = 0.4;
-    let bin_bottom: f32 = bottom + 0.4;
     let inlet_width: f32 = 8.0;
-    let outer_wall_thickness: f32 = 0.25;
+    let playfield_wall_thickness: f32 = 0.4;
+    let playfield_width: f32 =
+        WIDTH - (OUTER_WALL_THICKNESS + playfield_wall_thickness + BIN_WIDTH) * 2.0;
 
     let mut left_side = Path::new();
-    left_side.move_to(Vec2::new(left, bottom));
-    left_side.line_to(Vec2::new(-drain_width / 2.0, bottom));
-    left_side.line_to(Vec2::new(-drain_width / 2.0, bottom + outer_wall_thickness));
-    left_side.line_to(Vec2::new(-playfield_width / 2.0, bottom + 1.0));
-    left_side.line_to(Vec2::new(-playfield_width / 2.0, target_bottom));
+    left_side.move_to(Vec2::new(LEFT, BOTTOM));
+    left_side.line_to(Vec2::new(-drain_width / 2.0, BOTTOM));
+    left_side.line_to(Vec2::new(-drain_width / 2.0, BOTTOM + OUTER_WALL_THICKNESS));
+    left_side.line_to(Vec2::new(-playfield_width / 2.0, BOTTOM + 1.0));
+    left_side.line_to(Vec2::new(-playfield_width / 2.0, BIN_TOP));
     left_side.line_to(Vec2::new(
         -playfield_width / 2.0 - playfield_wall_thickness,
-        target_bottom,
+        BIN_TOP,
     ));
     left_side.line_to(Vec2::new(
         -playfield_width / 2.0 - playfield_wall_thickness,
-        bin_bottom,
+        BIN_BOTTOM,
     ));
-    left_side.line_to(Vec2::new(left + outer_wall_thickness, bin_bottom));
-    left_side.line_to(Vec2::new(left + outer_wall_thickness, top - 3.0));
-    left_side.line_to(Vec2::new(-inlet_width / 2.0, top - outer_wall_thickness));
-    left_side.line_to(Vec2::new(-inlet_width / 2.0, top));
-    left_side.line_to(Vec2::new(left, top));
+    left_side.line_to(Vec2::new(LEFT + OUTER_WALL_THICKNESS, BIN_BOTTOM));
+    left_side.line_to(Vec2::new(LEFT + OUTER_WALL_THICKNESS, TOP - 3.0));
+    left_side.line_to(Vec2::new(-inlet_width / 2.0, TOP - OUTER_WALL_THICKNESS));
+    left_side.line_to(Vec2::new(-inlet_width / 2.0, TOP));
+    left_side.line_to(Vec2::new(LEFT, TOP));
     left_side.close();
 
     commands.spawn((
@@ -238,45 +254,43 @@ fn spawn_walls(
     ));
 
     let mut right_side = Path::new();
-    right_side.move_to(Vec2::new(right, bottom));
-    right_side.line_to(Vec2::new(drain_width / 2.0, bottom));
-    right_side.line_to(Vec2::new(drain_width / 2.0, bottom + outer_wall_thickness));
-    right_side.line_to(Vec2::new(playfield_width / 2.0, bottom + 1.0));
+    right_side.move_to(Vec2::new(RIGHT, BOTTOM));
+    right_side.line_to(Vec2::new(drain_width / 2.0, BOTTOM));
+    right_side.line_to(Vec2::new(drain_width / 2.0, BOTTOM + OUTER_WALL_THICKNESS));
+    right_side.line_to(Vec2::new(playfield_width / 2.0, BOTTOM + 1.0));
     right_side.line_to(Vec2::new(
         playfield_width / 2.0,
-        target_bottom - playfield_wall_thickness / 2.0,
+        BIN_TOP - playfield_wall_thickness / 2.0,
     ));
     right_side.arc_to(
         Vec2::new(
             playfield_width / 2.0 + playfield_wall_thickness,
-            target_bottom - playfield_wall_thickness / 2.0,
+            BIN_TOP - playfield_wall_thickness / 2.0,
         ),
         Vec2::new(
             playfield_width / 2.0 + playfield_wall_thickness / 2.0,
-            target_bottom - playfield_wall_thickness / 2.0,
+            BIN_TOP - playfield_wall_thickness / 2.0,
         ),
         10,
         WindDirection::Clockwise,
     );
-    let bin_width =
-        (WIDTH - playfield_width) / 2.0 - playfield_wall_thickness - outer_wall_thickness;
     right_side.line_to(Vec2::new(
         playfield_width / 2.0 + playfield_wall_thickness,
-        bin_bottom + bin_width / 2.0,
+        BIN_BOTTOM + BIN_WIDTH / 2.0,
     ));
     right_side.arc_to(
-        Vec2::new(right - outer_wall_thickness, bin_bottom + bin_width / 2.0),
+        Vec2::new(RIGHT - OUTER_WALL_THICKNESS, BIN_BOTTOM + BIN_WIDTH / 2.0),
         Vec2::new(
-            playfield_width / 2.0 + playfield_wall_thickness + bin_width / 2.0,
-            bin_bottom + bin_width / 2.0,
+            playfield_width / 2.0 + playfield_wall_thickness + BIN_WIDTH / 2.0,
+            BIN_BOTTOM + BIN_WIDTH / 2.0,
         ),
         10,
         WindDirection::CounterClockwise,
     );
-    right_side.line_to(Vec2::new(right - outer_wall_thickness, top - 3.0));
-    right_side.line_to(Vec2::new(inlet_width / 2.0, top - outer_wall_thickness));
-    right_side.line_to(Vec2::new(inlet_width / 2.0, top));
-    right_side.line_to(Vec2::new(right, top));
+    right_side.line_to(Vec2::new(RIGHT - OUTER_WALL_THICKNESS, TOP - 3.0));
+    right_side.line_to(Vec2::new(inlet_width / 2.0, TOP - OUTER_WALL_THICKNESS));
+    right_side.line_to(Vec2::new(inlet_width / 2.0, TOP));
+    right_side.line_to(Vec2::new(RIGHT, TOP));
     right_side.close();
     right_side.reverse_winding_order();
 
@@ -287,7 +301,7 @@ fn spawn_walls(
         MaterialMesh2dBundle {
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             mesh: meshes.add(right_side.build_triangle_mesh()).into(),
-            material: materials.add(ColorMaterial::from(Color::GREEN)),
+            material: materials.add(ColorMaterial::from(Color::DARK_GREEN)),
             ..default()
         },
         CollisionLayers::new([Layer::Level], [Layer::Rope, Layer::Shapes]),
@@ -300,7 +314,7 @@ fn spawn_walls(
         RigidBody::Static,
         Collider::cuboid(inlet_width, block_thickness),
         MaterialMesh2dBundle {
-            transform: Transform::from_xyz(0.0, top - outer_wall_thickness / 2.0, 0.0),
+            transform: Transform::from_xyz(0.0, TOP - OUTER_WALL_THICKNESS / 2.0, 0.0),
             mesh: meshes
                 .add(
                     shape::Quad {
@@ -322,7 +336,7 @@ fn spawn_walls(
         RigidBody::Static,
         Collider::cuboid(drain_width, block_thickness),
         MaterialMesh2dBundle {
-            transform: Transform::from_xyz(0.0, bottom + outer_wall_thickness / 2.0, 0.0),
+            transform: Transform::from_xyz(0.0, BOTTOM + OUTER_WALL_THICKNESS / 2.0, 0.0),
             mesh: meshes
                 .add(
                     shape::Quad {
@@ -336,5 +350,43 @@ fn spawn_walls(
             ..default()
         },
         CollisionLayers::new([Layer::PlayerBlocker], [Layer::Rope]),
+    ));
+}
+
+fn spawn_score_displays(commands: &mut Commands, asset_server: Res<AssetServer>) {
+    let text_style = TextStyle {
+        font: asset_server.load("fonts/Roboto-Regular.ttf"),
+        font_size: 100.0,
+        color: Color::ANTIQUE_WHITE,
+    };
+
+    commands.spawn((
+        Text2dBundle {
+            transform: Transform::from_xyz(LEFT + 1.0, TOP - 1.0, 1.0)
+                .with_scale(Vec3::splat(0.01)),
+            text: Text {
+                sections: vec![TextSection::new("0", text_style.clone())],
+                alignment: TextAlignment::Left,
+                linebreak_behavior: bevy::text::BreakLineOn::NoWrap,
+            },
+            ..default()
+        },
+        ScoreDisplay::Left,
+        Name::new("LeftScoreDisplay"),
+    ));
+
+    commands.spawn((
+        Text2dBundle {
+            transform: Transform::from_xyz(RIGHT - 1.0, TOP - 1.0, 1.0)
+                .with_scale(Vec3::splat(0.01)),
+            text: Text {
+                sections: vec![TextSection::new("0", text_style)],
+                alignment: TextAlignment::Right,
+                linebreak_behavior: bevy::text::BreakLineOn::NoWrap,
+            },
+            ..default()
+        },
+        ScoreDisplay::Right,
+        Name::new("RightScoreDisplay"),
     ));
 }
