@@ -59,21 +59,40 @@ pub enum Layer {
 }
 
 fn spawn_cursors(mut commands: &mut Commands) {
-    let left_pos = Vec2::new(-2.0, 0.0);
-    let right_pos = Vec2::new(2.0, 0.0);
+    // Spawns a rope of this length between two cursor-controlled objects.
+    const ROPE_LENGTH: f32 = 4.0;
+    // The rope is spawned in a shallow V shape, with this angle to the horizontal.
+    // Horizontal is a physically impossible configuration.
+    const RELAX_ANGLE_RAD: f32 = 0.1;
+
+    let width = ROPE_LENGTH * RELAX_ANGLE_RAD.cos();
+    let left_pos = Vec2::new(-width / 2.0, 0.0);
+    let right_pos = Vec2::new(width / 2.0, 0.0);
+    let v_bottom = Vec2::new(0.0, -ROPE_LENGTH * RELAX_ANGLE_RAD.sin() / 2.0);
+
     let player_id = commands
         .spawn((Name::new("Player"), SpatialBundle::default()))
         .id();
 
     let left_cursor =
         spawn_cursor::<LeftCursor>(&mut commands, player_id, left_pos, None, "Left Cursor");
-    let last_rope = spawn_rope(
+    let middle_rope = spawn_rope(
         &mut commands,
         player_id,
         left_pos,
-        right_pos,
-        20,
+        v_bottom,
+        10,
         left_cursor,
+        Vec2::ZERO,
+    );
+    let last_rope = spawn_rope(
+        &mut commands,
+        player_id,
+        v_bottom,
+        right_pos,
+        10,
+        middle_rope.0,
+        middle_rope.1,
     );
     spawn_cursor::<RightCursor>(
         &mut commands,
@@ -154,27 +173,28 @@ fn spawn_rope(
     end_pos: Vec2,
     num_segments: u32,
     parent_id: Entity,
+    parent_anchor: Vec2,
 ) -> (Entity, Vec2) {
     // Total width of n segments: width = (n + 1) * GAP + n * body_size
     // Solving for body_size: body_size = (width - (n + 1) * GAP) / n
     const GAP: f32 = 0.05;
     let total_gap_width = (num_segments + 1) as f32 * GAP;
-    let body_length = ((end_pos.x - start_pos.x) - total_gap_width) / num_segments as f32;
+    let body_length = ((end_pos - start_pos).length() - total_gap_width) / num_segments as f32;
+    let per_segment_vector = (end_pos - start_pos) / num_segments as f32;
+    let per_body_vector = (end_pos - start_pos).normalize() * body_length;
+    let rotation =
+        Quat::from_rotation_z(f32::atan2(end_pos.y - start_pos.y, end_pos.x - start_pos.x));
     const THICKNESS: f32 = 0.05;
 
     let mut prev_id = parent_id;
-    let mut prev_anchor = Vec2::new(0.0, 0.0);
+    let mut prev_anchor = parent_anchor;
     for i in 0..num_segments {
-        let dx = (i as f32 + 1.0) * GAP + (i as f32) * body_length;
+        let center = start_pos + per_segment_vector * (i as f32) + per_body_vector / 2.0;
 
         let current_id = commands
             .spawn((
                 SpriteBundle {
-                    transform: Transform::from_xyz(
-                        start_pos.x + dx + body_length / 2.0,
-                        start_pos.y,
-                        0.0,
-                    ),
+                    transform: Transform::from_xyz(center.x, center.y, 0.0).with_rotation(rotation),
                     sprite: Sprite {
                         custom_size: Some(Vec2::new(body_length, THICKNESS)),
                         ..default()

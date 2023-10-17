@@ -2,9 +2,9 @@ use cc;
 
 fn main() {
     cc::Build::new()
-        .flag("-Wno-unused-parameter")  // Suppress unused parameter warnings
-        .flag("-Wno-tautological-pointer-compare")  // Suppress always false comparison warning
-        .flag("-Wno-unused-function")  // Suppress unused function warnings
+        .flag("-Wno-unused-parameter") // Suppress unused parameter warnings
+        .flag("-Wno-tautological-pointer-compare") // Suppress always false comparison warning
+        .flag("-Wno-unused-function") // Suppress unused function warnings
         .file("manymouse/linux_evdev.c")
         .file("manymouse/macosx_hidmanager.c")
         .file("manymouse/macosx_hidutilities.c")
@@ -21,6 +21,7 @@ fn main() {
         .generate()
         .expect("Failed to generate bindings");
 
-    bindings.write_to_file("src/bindings.rs")
+    bindings
+        .write_to_file("src/mischief/bindings.rs")
         .expect("Failed to write bindings");
 }
