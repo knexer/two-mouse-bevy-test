@@ -63,7 +63,7 @@ fn spawn_cursors(mut commands: &mut Commands) {
     const ROPE_LENGTH: f32 = 4.0;
     // The rope is spawned in a shallow V shape, with this angle to the horizontal.
     // Horizontal is a physically impossible configuration.
-    const RELAX_ANGLE_RAD: f32 = 0.1;
+    const RELAX_ANGLE_RAD: f32 = 0.4;
 
     let width = ROPE_LENGTH * RELAX_ANGLE_RAD.cos();
     let left_pos = Vec2::new(-width / 2.0, 0.0);
@@ -321,7 +321,7 @@ fn spawn_walls(
         MaterialMesh2dBundle {
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             mesh: meshes.add(right_side.build_triangle_mesh()).into(),
-            material: materials.add(ColorMaterial::from(Color::DARK_GREEN)),
+            material: materials.add(ColorMaterial::from(Color::GREEN)),
             ..default()
         },
         CollisionLayers::new([Layer::Level], [Layer::Rope, Layer::Shapes]),

@@ -93,7 +93,10 @@ fn main() {
 
 fn size_window(mut windows: Query<&mut Window>) {
     let mut window = windows.single_mut();
-    window.resolution = WindowResolution::new(1600.0, 900.0);
+    let scale_factor = window.scale_factor() as f32;
+    window.resolution = WindowResolution::new(1600.0 * scale_factor, 900.0 * scale_factor)
+        .with_scale_factor_override(scale_factor as f64);
+    window.position.center(MonitorSelection::Current);
 }
 
 fn toggle_os_cursor(mut windows: Query<&mut Window>) {
@@ -176,7 +179,7 @@ fn configure_shapes(
                     .into(),
                 )
                 .into(),
-            material: materials.add(ColorMaterial::from(Color::DARK_GREEN)),
+            material: materials.add(ColorMaterial::from(Color::GREEN)),
             collider: Collider::ball(default_size / 2.0),
             shape: Shape::Circle,
         },
