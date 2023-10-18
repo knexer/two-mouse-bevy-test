@@ -4,9 +4,9 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_xpbd_2d::prelude::*;
 
 use crate::{
+    gameplay::ScoreDisplay,
     path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
-    ScoreDisplay,
 };
 
 pub struct SpawnPlugin;
