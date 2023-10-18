@@ -16,50 +16,30 @@ mod path;
 mod player;
 mod spawn_level;
 
-// Making a game with Bevy + Mischief
-// Specifically, a game where you control two ends of a rope with two mice.
-// You manipulate other objects with the rope.
+// MVP brief features:
 
-// First steps:
-// Make two virtual cursors that you can move around (done)
-// Assign each cursor to a hand (i.e. click LMB to assign to left hand, RMB to assign to right hand) (done)
-// Capture and hide the OS cursor (done)
-// Press escape to quit (done)
-// Make two rigid bodies that fall from the top of the screen (done)
-// Make the bodies dangle from the cursors (done)
-// Make a rope of bodies that dangles from the cursors (done)
-// Move the cursor with forces so it doesn't make the rope go crazy (done)
-// Make a single rope that connects the two cursors (done! finally!)
+// You control two ends of a physics-simulated rope with two mice.
+// You use the rope to sort green circles and purple squares into two containers.
+// 10 shapes will fall from above the screen over the course of the level.
+// Your score is how many shapes you sorted correctly minus how many you sorted incorrectly.
+// Shapes may also fall out the bottom of the screen, which doesn't penalize your score.
+// The game ends when all 10 shapes have fallen.
+// Click any mouse button to start a new game.
 
-// Okay, the basic platform is in place. Let's make a game!
-
-// Revised plan:
-// Two types of shapes fall from the top of the screen.
-// One type should go to the left; the other to the right; they can also fall straight through and be gone.
-// You get points for sorting correctly, lose points for sorting wrong, and miss out on points for letting them fall through.
-
-// MVP:
-// Spawn a purple square and a green circle at the top of the screen. (done)
-// Spawn on a timer instead of at the start. (done)
-// Randomize their params (size, position, velocity, etc.). (position done)
-// Split out some modules. (done)
-// Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain. (done)
-// Block the player from moving the rope outside the level. (done)
-// Add a score counter for each side. (done)
-// Wait to start the game until both cursors are assigned. (done)
-// Add an end condition. A timer? A score threshold? A number of shapes?
+// MVP is in place! Polish time.
 
 // Polish:
+// Add a title screen shown during AppState::Init.
 // Sound effects!
-// Show a title screen while waiting for the player to attach the cursors.
 // Increase intensity over time.
 // Spawn shapes in more interesting ways. Randomized params, spawn in waves, spawn in patterns.
 // Differentiate left vs right cursors visually.
-// Pick a nice color palette and recolor everything with it.
+// Pick a nicer color palette and recolor everything with it.
 // Round the rest of the corners on the right side of the level.
 
 // Bugs:
 // - Window resolution doesn't seem to be working as I expect it to.
+// - Shapes can get stuck on top of the level, preventing the game from ending.
 
 const PIXELS_PER_METER: f32 = 100.0;
 
