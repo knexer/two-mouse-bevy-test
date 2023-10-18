@@ -3,7 +3,7 @@ use bevy_xpbd_2d::prelude::*;
 
 use crate::{
     mischief::{poll_events, MischiefEvent, MischiefEventData, MischiefPlugin},
-    PIXELS_PER_METER,
+    AppState, PIXELS_PER_METER,
 };
 
 #[derive(Component)]
@@ -28,7 +28,12 @@ impl Plugin for PlayerPlugin {
                     .after(poll_events)
                     .run_if(input_toggle_active(true, KeyCode::Grave)),
             )
-            .add_systems(FixedUpdate, apply_cursor_force.before(PhysicsSet::Prepare));
+            .add_systems(
+                FixedUpdate,
+                apply_cursor_force
+                    .before(PhysicsSet::Prepare)
+                    .run_if(in_state(AppState::Playing)),
+            );
     }
 }
 

@@ -10,7 +10,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
 use player::PlayerPlugin;
 use rand::Rng;
-use spawn_level::{Layer, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
+use spawn_level::{Layer, SpawnPlugin, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
 
 use crate::spawn_level::{LEFT_SCORE_REGION, RIGHT_SCORE_REGION};
 
@@ -62,7 +62,6 @@ mod spawn_level;
 // Round the rest of the corners on the right side of the level.
 
 // Bugs:
-// - Sometimes the game freezes, maybe physics related? Happens sometimes at game start, or when things spawn on top of each other.
 // - Window resolution doesn't seem to be working as I expect it to.
 
 const PIXELS_PER_METER: f32 = 100.0;
@@ -71,8 +70,8 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(PlayerPlugin)
+        .add_plugins(SpawnPlugin)
         .add_plugins(PhysicsPlugins::new(FixedUpdate))
-        .insert_resource(SubstepCount(20))
         .add_plugins(WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::Grave)))
         .add_systems(
             Update,
@@ -82,11 +81,19 @@ fn main() {
             Startup,
             (size_window, spawn_camera, toggle_os_cursor).chain(),
         )
-        .add_systems(Startup, spawn_level::spawn_level)
+        .add_state::<AppState>()
         .add_systems(Startup, configure_shapes)
-        .add_systems(Update, (spawn_shapes, despawn_shapes))
+        .add_systems(
+            Update,
+            (spawn_shapes, despawn_shapes).run_if(in_state(AppState::Playing)),
+        )
         .insert_resource(Score::default())
-        .add_systems(Update, (update_score, display_score).chain())
+        .add_systems(
+            Update,
+            (update_score, display_score)
+                .chain()
+                .run_if(in_state(AppState::Playing)),
+        )
         .add_systems(Update, bevy::window::close_on_esc)
         .run();
 }
@@ -276,4 +283,11 @@ fn display_score(score: Res<Score>, mut displays: Query<(&mut Text, &ScoreDispla
             ScoreDisplay::Right => format!("{}", score.right),
         };
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
+pub enum AppState {
+    #[default]
+    Spawning,
+    Playing,
 }

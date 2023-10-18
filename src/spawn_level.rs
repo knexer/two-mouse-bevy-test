@@ -1,11 +1,42 @@
+use std::time::Duration;
+
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_xpbd_2d::prelude::*;
 
 use crate::{
     path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
-    ScoreDisplay,
+    AppState, ScoreDisplay,
 };
+
+pub struct SpawnPlugin;
+
+impl Plugin for SpawnPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(OnEnter(AppState::Spawning), spawn_level)
+            .insert_resource(SettleTimer(Timer::from_seconds(0.05, TimerMode::Once)))
+            .add_systems(Startup, bevy_xpbd_2d::pause)
+            .add_systems(OnExit(AppState::Spawning), bevy_xpbd_2d::resume)
+            .add_systems(Update, exit_spawning.run_if(in_state(AppState::Spawning)));
+    }
+}
+
+#[derive(Resource)]
+struct SettleTimer(Timer);
+
+fn exit_spawning(
+    mut timer: ResMut<SettleTimer>,
+    mut app_state: ResMut<NextState<AppState>>,
+    time: Res<Time>,
+) {
+    if timer
+        .0
+        .tick(Duration::from_secs_f32(time.delta_seconds()))
+        .just_finished()
+    {
+        app_state.set(AppState::Playing);
+    }
+}
 
 pub const WIDTH: f32 = 16.0;
 pub const HEIGHT: f32 = 9.0;
@@ -175,13 +206,10 @@ fn spawn_rope(
     parent_id: Entity,
     parent_anchor: Vec2,
 ) -> (Entity, Vec2) {
-    // Total width of n segments: width = (n + 1) * GAP + n * body_size
-    // Solving for body_size: body_size = (width - (n + 1) * GAP) / n
+    // Spawn n segments, each of which has some body_length and half of a gap on either side.
     const GAP: f32 = 0.05;
-    let total_gap_width = (num_segments + 1) as f32 * GAP;
-    let body_length = ((end_pos - start_pos).length() - total_gap_width) / num_segments as f32;
     let per_segment_vector = (end_pos - start_pos) / num_segments as f32;
-    let per_body_vector = (end_pos - start_pos).normalize() * body_length;
+    let body_length = per_segment_vector.length() - GAP;
     let rotation =
         Quat::from_rotation_z(f32::atan2(end_pos.y - start_pos.y, end_pos.x - start_pos.x));
     const THICKNESS: f32 = 0.05;
@@ -189,7 +217,7 @@ fn spawn_rope(
     let mut prev_id = parent_id;
     let mut prev_anchor = parent_anchor;
     for i in 0..num_segments {
-        let center = start_pos + per_segment_vector * (i as f32) + per_body_vector / 2.0;
+        let center = start_pos + per_segment_vector * (i as f32 + 0.5);
 
         let current_id = commands
             .spawn((
