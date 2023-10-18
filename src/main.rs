@@ -8,9 +8,9 @@ use bevy::{
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
-use player::PlayerPlugin;
+use player::{AttachState, PlayerPlugin};
 use rand::Rng;
-use spawn_level::{Layer, SpawnPlugin, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
+use spawn_level::{Layer, SpawnPlugin, SpawnState, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION};
 
 use crate::spawn_level::{LEFT_SCORE_REGION, RIGHT_SCORE_REGION};
 
@@ -49,7 +49,7 @@ mod spawn_level;
 // Rework level layout - shapes fall in from offscreen, add containers for shapes on the sides, slope the floor towards a center drain. (done)
 // Block the player from moving the rope outside the level. (done)
 // Add a score counter for each side. (done)
-// Wait to start the game until both cursors are assigned.
+// Wait to start the game until both cursors are assigned. (done)
 // Add an end condition. A timer? A score threshold? A number of shapes?
 
 // Polish:
@@ -81,8 +81,10 @@ fn main() {
             Startup,
             (size_window, spawn_camera, toggle_os_cursor).chain(),
         )
-        .add_state::<AppState>()
+        .add_systems(Update, bevy::window::close_on_esc)
         .add_systems(Startup, configure_shapes)
+        .add_state::<AppState>()
+        .add_systems(Update, start_playing.run_if(in_state(AppState::Init)))
         .add_systems(
             Update,
             (spawn_shapes, despawn_shapes).run_if(in_state(AppState::Playing)),
@@ -94,7 +96,6 @@ fn main() {
                 .chain()
                 .run_if(in_state(AppState::Playing)),
         )
-        .add_systems(Update, bevy::window::close_on_esc)
         .run();
 }
 
@@ -288,6 +289,16 @@ fn display_score(score: Res<Score>, mut displays: Query<(&mut Text, &ScoreDispla
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 pub enum AppState {
     #[default]
-    Spawning,
+    Init,
     Playing,
+}
+
+fn start_playing(
+    spawn_state: Res<State<SpawnState>>,
+    attach_state: Res<State<AttachState>>,
+    mut app_state: ResMut<NextState<AppState>>,
+) {
+    if spawn_state.get() == &SpawnState::Done && attach_state.get() == &AttachState::Attached {
+        app_state.set(AppState::Playing);
+    }
 }

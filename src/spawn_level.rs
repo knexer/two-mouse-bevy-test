@@ -6,19 +6,27 @@ use bevy_xpbd_2d::prelude::*;
 use crate::{
     path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
-    AppState, ScoreDisplay,
+    ScoreDisplay,
 };
 
 pub struct SpawnPlugin;
 
 impl Plugin for SpawnPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::Spawning), spawn_level)
+        app.add_systems(OnEnter(SpawnState::Settling), spawn_level)
+            .add_state::<SpawnState>()
             .insert_resource(SettleTimer(Timer::from_seconds(0.05, TimerMode::Once)))
             .add_systems(Startup, bevy_xpbd_2d::pause)
-            .add_systems(OnExit(AppState::Spawning), bevy_xpbd_2d::resume)
-            .add_systems(Update, exit_spawning.run_if(in_state(AppState::Spawning)));
+            .add_systems(OnExit(SpawnState::Settling), bevy_xpbd_2d::resume)
+            .add_systems(Update, exit_spawning.run_if(in_state(SpawnState::Settling)));
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
+pub enum SpawnState {
+    #[default]
+    Settling,
+    Done,
 }
 
 #[derive(Resource)]
@@ -26,7 +34,7 @@ struct SettleTimer(Timer);
 
 fn exit_spawning(
     mut timer: ResMut<SettleTimer>,
-    mut app_state: ResMut<NextState<AppState>>,
+    mut spawn_state: ResMut<NextState<SpawnState>>,
     time: Res<Time>,
 ) {
     if timer
@@ -34,7 +42,7 @@ fn exit_spawning(
         .tick(Duration::from_secs_f32(time.delta_seconds()))
         .just_finished()
     {
-        app_state.set(AppState::Playing);
+        spawn_state.set(SpawnState::Done);
     }
 }
 

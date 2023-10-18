@@ -3,7 +3,7 @@ use bevy_xpbd_2d::prelude::*;
 
 use crate::{
     mischief::{poll_events, MischiefEvent, MischiefEventData, MischiefPlugin},
-    AppState, PIXELS_PER_METER,
+    PIXELS_PER_METER,
 };
 
 #[derive(Component)]
@@ -21,29 +21,41 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MischiefPlugin)
             .register_type::<TargetVelocity>()
-            .add_systems(Update, attach_cursors)
+            .add_state::<AttachState>()
+            .add_systems(
+                Update,
+                attach_cursors.run_if(in_state(AttachState::Waiting)),
+            )
             .add_systems(
                 Update,
                 move_cursors
                     .after(poll_events)
                     .run_if(input_toggle_active(true, KeyCode::Grave)),
             )
-            .add_systems(
-                FixedUpdate,
-                apply_cursor_force
-                    .before(PhysicsSet::Prepare)
-                    .run_if(in_state(AppState::Playing)),
-            );
+            .add_systems(FixedUpdate, apply_cursor_force.before(PhysicsSet::Prepare));
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
+pub enum AttachState {
+    #[default]
+    Waiting,
+    Attached,
 }
 
 fn attach_cursors(
     mut mouse_events: EventReader<MischiefEvent>,
     mut left_cursors: Query<&mut Cursor, (With<LeftCursor>, Without<RightCursor>)>,
     mut right_cursors: Query<&mut Cursor, (With<RightCursor>, Without<LeftCursor>)>,
+    mut state: ResMut<NextState<AttachState>>,
 ) {
     let left_cursor_device = left_cursors.single().0;
     let right_cursor_device = right_cursors.single().0;
+    if left_cursor_device != None && right_cursor_device != None {
+        state.set(AttachState::Attached);
+        return;
+    }
+
     for event in mouse_events.iter() {
         match event.event_data {
             MischiefEventData::Button {
