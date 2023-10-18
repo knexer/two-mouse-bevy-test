@@ -23,13 +23,40 @@ impl Plugin for GameplayPlugin {
                 Update,
                 (spawn_shapes, despawn_shapes).run_if(in_state(AppState::Playing)),
             )
-            .insert_resource(Score::default())
+            .add_systems(OnEnter(AppState::Playing), start_level)
+            .add_systems(Update, detect_game_over.run_if(in_state(AppState::Playing)))
             .add_systems(
                 Update,
                 (update_score, display_score)
                     .chain()
                     .run_if(in_state(AppState::Playing)),
             );
+    }
+}
+
+fn start_level(mut commands: Commands, shapes: Query<Entity, With<Shape>>) {
+    commands.insert_resource(Score::default());
+    commands.insert_resource(LevelState {
+        num_shapes_remaining: 10,
+    });
+    for entity in shapes.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+fn detect_game_over(
+    mut app_state: ResMut<NextState<AppState>>,
+    level_state: Res<LevelState>,
+    shapes: Query<&Transform, With<Shape>>,
+) {
+    if level_state.num_shapes_remaining == 0 {
+        if shapes.iter().all(|transform| {
+            let location = transform.translation.truncate();
+            LEFT_SCORE_REGION.contains(location) || RIGHT_SCORE_REGION.contains(location)
+        }) {
+            println!("Game over!");
+            app_state.set(AppState::GameOver);
+        }
     }
 }
 
@@ -106,8 +133,12 @@ fn spawn_shapes(
     mut commands: Commands,
     mut shape_configs: Query<&mut ShapeConfig>,
     mut shape_timer: ResMut<ShapeTimer>,
+    mut level_state: ResMut<LevelState>,
     time: Res<Time>,
 ) {
+    if level_state.num_shapes_remaining == 0 {
+        return;
+    }
     if !shape_timer
         .0
         .tick(Duration::from_secs_f32(time.delta_seconds()))
@@ -115,6 +146,8 @@ fn spawn_shapes(
     {
         return;
     }
+    level_state.num_shapes_remaining -= 1;
+
     let mut rng = rand::thread_rng();
     // Pick a random shape config
     let shape_configs = shape_configs.iter_mut().collect::<Vec<_>>();
@@ -187,4 +220,9 @@ fn display_score(score: Res<Score>, mut displays: Query<(&mut Text, &ScoreDispla
             ScoreDisplay::Right => format!("{}", score.right),
         };
     }
+}
+
+#[derive(Resource)]
+struct LevelState {
+    num_shapes_remaining: u32,
 }

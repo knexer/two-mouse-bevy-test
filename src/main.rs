@@ -6,6 +6,7 @@ use bevy::{
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_xpbd_2d::prelude::*;
 use gameplay::GameplayPlugin;
+use mischief::{MischiefEvent, MischiefEventData};
 use player::{AttachState, PlayerPlugin};
 use spawn_level::{SpawnPlugin, SpawnState};
 
@@ -81,6 +82,7 @@ fn main() {
         .add_systems(Update, bevy::window::close_on_esc)
         .add_state::<AppState>()
         .add_systems(Update, start_playing.run_if(in_state(AppState::Init)))
+        .add_systems(Update, start_new_game.run_if(in_state(AppState::GameOver)))
         .run();
 }
 
@@ -120,6 +122,7 @@ pub enum AppState {
     #[default]
     Init,
     Playing,
+    GameOver,
 }
 
 fn start_playing(
@@ -129,5 +132,20 @@ fn start_playing(
 ) {
     if spawn_state.get() == &SpawnState::Done && attach_state.get() == &AttachState::Attached {
         app_state.set(AppState::Playing);
+    }
+}
+
+fn start_new_game(
+    mut app_state: ResMut<NextState<AppState>>,
+    mut mischief_events: EventReader<MischiefEvent>,
+) {
+    for event in mischief_events.iter() {
+        if let MischiefEventData::Button {
+            button: _,
+            pressed: true,
+        } = event.event_data
+        {
+            app_state.set(AppState::Playing);
+        }
     }
 }
