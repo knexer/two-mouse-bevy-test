@@ -1,4 +1,5 @@
 use bevy::{
+    core_pipeline::clear_color::ClearColorConfig,
     input::common_conditions::{input_just_pressed, input_toggle_active},
     prelude::*,
     window::WindowResolution,
@@ -33,15 +34,22 @@ mod spawn_level;
 // Sound effects!
 // Increase intensity over time.
 // Spawn shapes in more interesting ways. Randomized params, spawn in waves, spawn in patterns.
-// Differentiate left vs right cursors visually.
-// Pick a nicer color palette and recolor everything with it.
 // Round the rest of the corners on the right side of the level.
+
+// Done polish:
+// Differentiate left vs right cursors visually. (done)
+// Pick a nicer color palette and recolor everything with it. (done)
 
 // Bugs:
 // - Window resolution doesn't seem to be working as I expect it to.
 // - Shapes can get stuck on top of the level, preventing the game from ending.
 
 const PIXELS_PER_METER: f32 = 100.0;
+pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);
+pub const LEFT_COLOR: Color = Color::rgb(17.0 / 255.0, 159.0 / 255.0, 166.0 / 255.0);
+pub const RIGHT_COLOR: Color = Color::rgb(226.0 / 255.0, 101.0 / 255.0, 60.0 / 255.0);
+pub const TEXT_COLOR: Color = Color::rgb(215.0 / 255.0, 217.0 / 255.0, 206.0 / 255.0);
+pub const BAD_COLOR: Color = Color::rgb(229.0 / 255.0, 39.0 / 255.0, 36.0 / 255.0);
 
 fn main() {
     App::new()
@@ -50,6 +58,7 @@ fn main() {
         .add_plugins(SpawnPlugin)
         .add_plugins(GameplayPlugin)
         .add_plugins(PhysicsPlugins::new(FixedUpdate))
+        .insert_resource(SubstepCount(20))
         .add_plugins(WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::Grave)))
         .add_systems(
             Update,
@@ -92,6 +101,9 @@ fn spawn_camera(mut commands: Commands) {
             near: -1000.,
             scale: 1.0 / PIXELS_PER_METER,
             ..default()
+        },
+        camera_2d: Camera2d {
+            clear_color: ClearColorConfig::Custom(BACKGROUND_COLOR),
         },
         ..default()
     });

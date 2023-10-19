@@ -1,12 +1,16 @@
 use std::time::Duration;
 
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
+use bevy::{
+    prelude::*,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+};
 use bevy_xpbd_2d::prelude::*;
 
 use crate::{
     gameplay::ScoreDisplay,
     path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
+    BAD_COLOR, LEFT_COLOR, RIGHT_COLOR, TEXT_COLOR,
 };
 
 pub struct SpawnPlugin;
@@ -80,12 +84,27 @@ pub const RIGHT_SCORE_REGION: Rect = Rect {
 
 pub fn spawn_level(
     mut commands: Commands,
-    meshes: ResMut<Assets<Mesh>>,
-    materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    spawn_cursors(&mut commands);
-    spawn_walls(&mut commands, meshes, materials);
+    let left_color = materials.add(ColorMaterial::from(LEFT_COLOR));
+    let right_color = materials.add(ColorMaterial::from(RIGHT_COLOR));
+    let bad_color = materials.add(ColorMaterial::from(BAD_COLOR));
+
+    spawn_cursors(
+        &mut commands,
+        &mut meshes,
+        left_color.clone(),
+        right_color.clone(),
+    );
+    spawn_walls(
+        &mut commands,
+        &mut meshes,
+        left_color,
+        right_color,
+        bad_color,
+    );
     spawn_score_displays(&mut commands, asset_server);
 }
 
@@ -97,7 +116,12 @@ pub enum Layer {
     PlayerBlocker,
 }
 
-fn spawn_cursors(mut commands: &mut Commands) {
+fn spawn_cursors(
+    mut commands: &mut Commands,
+    mut meshes: &mut ResMut<Assets<Mesh>>,
+    left_color: Handle<ColorMaterial>,
+    right_color: Handle<ColorMaterial>,
+) {
     // Spawns a rope of this length between two cursor-controlled objects.
     const ROPE_LENGTH: f32 = 4.0;
     // The rope is spawned in a shallow V shape, with this angle to the horizontal.
@@ -113,11 +137,39 @@ fn spawn_cursors(mut commands: &mut Commands) {
         .spawn((Name::new("Player"), SpatialBundle::default()))
         .id();
 
-    let left_cursor =
-        spawn_cursor::<LeftCursor>(&mut commands, player_id, left_pos, None, "Left Cursor");
+    let cursor_size = 0.3;
+    let left_cursor_mesh: Mesh2dHandle = meshes
+        .add(
+            shape::Quad {
+                size: Vec2::new(cursor_size, cursor_size),
+                ..default()
+            }
+            .into(),
+        )
+        .into();
+    let right_cursor_mesh: Mesh2dHandle = meshes
+        .add(
+            shape::Circle {
+                radius: cursor_size / 2.0,
+                ..default()
+            }
+            .into(),
+        )
+        .into();
+    let left_cursor = spawn_cursor::<LeftCursor>(
+        &mut commands,
+        left_cursor_mesh,
+        player_id,
+        left_color.clone(),
+        left_pos,
+        None,
+        "Left Cursor",
+    );
     let middle_rope = spawn_rope(
         &mut commands,
+        &mut meshes,
         player_id,
+        left_color,
         left_pos,
         v_bottom,
         10,
@@ -126,7 +178,9 @@ fn spawn_cursors(mut commands: &mut Commands) {
     );
     let last_rope = spawn_rope(
         &mut commands,
+        &mut meshes,
         player_id,
+        right_color.clone(),
         v_bottom,
         right_pos,
         10,
@@ -135,7 +189,9 @@ fn spawn_cursors(mut commands: &mut Commands) {
     );
     spawn_cursor::<RightCursor>(
         &mut commands,
+        right_cursor_mesh,
         player_id,
+        right_color,
         right_pos,
         Some(last_rope),
         "Right Cursor",
@@ -144,7 +200,9 @@ fn spawn_cursors(mut commands: &mut Commands) {
 
 fn spawn_cursor<T>(
     commands: &mut Commands,
+    mesh: Mesh2dHandle,
     player_id: Entity,
+    color: Handle<ColorMaterial>,
     start_pos: Vec2,
     connect_to: Option<(Entity, Vec2)>,
     name: &str,
@@ -155,12 +213,10 @@ where
     let cursor_size = 0.3;
     let cursor_id = commands
         .spawn((
-            SpriteBundle {
+            MaterialMesh2dBundle {
                 transform: Transform::from_xyz(start_pos.x, start_pos.y, 0.0),
-                sprite: Sprite {
-                    custom_size: Some(Vec2::splat(cursor_size)),
-                    ..default()
-                },
+                mesh,
+                material: color,
                 ..default()
             },
             RigidBody::Dynamic,
@@ -207,7 +263,9 @@ where
 
 fn spawn_rope(
     commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
     player_id: Entity,
+    color: Handle<ColorMaterial>,
     start_pos: Vec2,
     end_pos: Vec2,
     num_segments: u32,
@@ -221,6 +279,15 @@ fn spawn_rope(
     let rotation =
         Quat::from_rotation_z(f32::atan2(end_pos.y - start_pos.y, end_pos.x - start_pos.x));
     const THICKNESS: f32 = 0.05;
+    let mesh: Mesh2dHandle = meshes
+        .add(
+            shape::Quad {
+                size: Vec2::new(body_length, THICKNESS),
+                ..default()
+            }
+            .into(),
+        )
+        .into();
 
     let mut prev_id = parent_id;
     let mut prev_anchor = parent_anchor;
@@ -229,12 +296,10 @@ fn spawn_rope(
 
         let current_id = commands
             .spawn((
-                SpriteBundle {
+                MaterialMesh2dBundle {
                     transform: Transform::from_xyz(center.x, center.y, 0.0).with_rotation(rotation),
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(body_length, THICKNESS)),
-                        ..default()
-                    },
+                    mesh: mesh.clone(),
+                    material: color.clone(),
                     ..default()
                 },
                 RigidBody::Dynamic,
@@ -266,8 +331,10 @@ fn spawn_rope(
 
 fn spawn_walls(
     commands: &mut Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    left_color: Handle<ColorMaterial>,
+    right_color: Handle<ColorMaterial>,
+    bad_color: Handle<ColorMaterial>,
 ) {
     let drain_width: f32 = 2.0;
     let inlet_width: f32 = 8.0;
@@ -303,7 +370,7 @@ fn spawn_walls(
         MaterialMesh2dBundle {
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             mesh: meshes.add(left_side.build_triangle_mesh()).into(),
-            material: materials.add(ColorMaterial::from(Color::PURPLE)),
+            material: left_color,
             ..default()
         },
         CollisionLayers::new([Layer::Level], [Layer::Rope, Layer::Shapes]),
@@ -357,30 +424,29 @@ fn spawn_walls(
         MaterialMesh2dBundle {
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             mesh: meshes.add(right_side.build_triangle_mesh()).into(),
-            material: materials.add(ColorMaterial::from(Color::GREEN)),
+            material: right_color,
             ..default()
         },
         CollisionLayers::new([Layer::Level], [Layer::Rope, Layer::Shapes]),
     ));
 
     // Prevent the player from passing through the inlet.
-    let block_thickness = 0.2;
     commands.spawn((
         Name::new("InletBlock"),
         RigidBody::Static,
-        Collider::cuboid(inlet_width, block_thickness),
+        Collider::cuboid(inlet_width, OUTER_WALL_THICKNESS),
         MaterialMesh2dBundle {
             transform: Transform::from_xyz(0.0, TOP - OUTER_WALL_THICKNESS / 2.0, 0.0),
             mesh: meshes
                 .add(
                     shape::Quad {
-                        size: Vec2::new(inlet_width, block_thickness),
+                        size: Vec2::new(inlet_width, OUTER_WALL_THICKNESS),
                         ..default()
                     }
                     .into(),
                 )
                 .into(),
-            material: materials.add(ColorMaterial::from(Color::RED)),
+            material: bad_color.clone(),
             ..default()
         },
         CollisionLayers::new([Layer::PlayerBlocker], [Layer::Rope]),
@@ -390,19 +456,19 @@ fn spawn_walls(
     commands.spawn((
         Name::new("DrainBlock"),
         RigidBody::Static,
-        Collider::cuboid(drain_width, block_thickness),
+        Collider::cuboid(drain_width, OUTER_WALL_THICKNESS),
         MaterialMesh2dBundle {
             transform: Transform::from_xyz(0.0, BOTTOM + OUTER_WALL_THICKNESS / 2.0, 0.0),
             mesh: meshes
                 .add(
                     shape::Quad {
-                        size: Vec2::new(drain_width, block_thickness),
+                        size: Vec2::new(drain_width, OUTER_WALL_THICKNESS),
                         ..default()
                     }
                     .into(),
                 )
                 .into(),
-            material: materials.add(ColorMaterial::from(Color::RED)),
+            material: bad_color,
             ..default()
         },
         CollisionLayers::new([Layer::PlayerBlocker], [Layer::Rope]),
@@ -413,7 +479,7 @@ fn spawn_score_displays(commands: &mut Commands, asset_server: Res<AssetServer>)
     let text_style = TextStyle {
         font: asset_server.load("fonts/Roboto-Regular.ttf"),
         font_size: 100.0,
-        color: Color::ANTIQUE_WHITE,
+        color: TEXT_COLOR,
     };
 
     commands.spawn((

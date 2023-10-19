@@ -11,7 +11,7 @@ use crate::{
     spawn_level::{
         Layer, LEFT_SCORE_REGION, RIGHT_SCORE_REGION, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION,
     },
-    AppState,
+    AppState, LEFT_COLOR, RIGHT_COLOR,
 };
 
 pub struct GameplayPlugin;
@@ -100,7 +100,7 @@ fn configure_shapes(
                     .into(),
                 )
                 .into(),
-            material: materials.add(ColorMaterial::from(Color::PURPLE)),
+            material: materials.add(ColorMaterial::from(LEFT_COLOR)),
             collider: Collider::cuboid(default_size, default_size),
             shape: Shape::Square,
         },
@@ -117,7 +117,7 @@ fn configure_shapes(
                     .into(),
                 )
                 .into(),
-            material: materials.add(ColorMaterial::from(Color::GREEN)),
+            material: materials.add(ColorMaterial::from(RIGHT_COLOR)),
             collider: Collider::ball(default_size / 2.0),
             shape: Shape::Circle,
         },
