@@ -10,7 +10,8 @@ use crate::{
     gameplay::ScoreDisplay,
     path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
-    BAD_COLOR, LEFT_COLOR, RIGHT_COLOR, TEXT_COLOR,
+    AppState, DespawnOnExitGameOver, DespawnOnExitInit, BAD_COLOR, LEFT_COLOR, RIGHT_COLOR,
+    TEXT_COLOR,
 };
 
 pub struct SpawnPlugin;
@@ -22,7 +23,8 @@ impl Plugin for SpawnPlugin {
             .insert_resource(SettleTimer(Timer::from_seconds(0.05, TimerMode::Once)))
             .add_systems(Startup, bevy_xpbd_2d::pause)
             .add_systems(OnExit(SpawnState::Settling), bevy_xpbd_2d::resume)
-            .add_systems(Update, exit_spawning.run_if(in_state(SpawnState::Settling)));
+            .add_systems(Update, exit_spawning.run_if(in_state(SpawnState::Settling)))
+            .add_systems(OnEnter(AppState::GameOver), spawn_game_over_screen);
     }
 }
 
@@ -105,7 +107,8 @@ pub fn spawn_level(
         right_color,
         bad_color,
     );
-    spawn_score_displays(&mut commands, asset_server);
+    spawn_score_displays(&mut commands, &asset_server);
+    spawn_title_screen(&mut commands, &asset_server);
 }
 
 #[derive(PhysicsLayer)]
@@ -475,7 +478,7 @@ fn spawn_walls(
     ));
 }
 
-fn spawn_score_displays(commands: &mut Commands, asset_server: Res<AssetServer>) {
+fn spawn_score_displays(commands: &mut Commands, asset_server: &Res<AssetServer>) {
     let text_style = TextStyle {
         font: asset_server.load("fonts/Roboto-Regular.ttf"),
         font_size: 100.0,
@@ -511,4 +514,100 @@ fn spawn_score_displays(commands: &mut Commands, asset_server: Res<AssetServer>)
         ScoreDisplay::Right,
         Name::new("RightScoreDisplay"),
     ));
+}
+
+fn spawn_title_screen(commands: &mut Commands, asset_server: &Res<AssetServer>) {
+    let text_style = TextStyle {
+        font: asset_server.load("fonts/Roboto-Regular.ttf"),
+        font_size: 100.0,
+        color: TEXT_COLOR,
+    };
+
+    commands
+        .spawn((
+            SpatialBundle {
+                transform: Transform::from_xyz(0.0, 0.0, 0.0),
+                ..default()
+            },
+            Name::new("TitleScreen"),
+            DespawnOnExitInit,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text2dBundle {
+                    transform: Transform::from_xyz(0.0, 3.0, 1.0).with_scale(Vec3::splat(0.01)),
+                    text: Text {
+                        sections: vec![TextSection::new("Mischief Link", text_style.clone())],
+                        alignment: TextAlignment::Center,
+                        linebreak_behavior: bevy::text::BreakLineOn::NoWrap,
+                    },
+                    ..default()
+                },
+                Name::new("Title"),
+            ));
+            parent.spawn((
+                Text2dBundle {
+                    transform: Transform::from_xyz(0.0, 2.0, 1.0).with_scale(Vec3::splat(0.005)),
+                    text: Text {
+                        sections: vec![TextSection::new(
+                            "Click outer mouse buttons to start",
+                            text_style.clone(),
+                        )],
+                        alignment: TextAlignment::Center,
+                        linebreak_behavior: bevy::text::BreakLineOn::NoWrap,
+                    },
+                    ..default()
+                },
+                Name::new("Instructions"),
+            ));
+        });
+}
+
+fn spawn_game_over_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let text_style = TextStyle {
+        font: asset_server.load("fonts/Roboto-Regular.ttf"),
+        font_size: 100.0,
+        color: TEXT_COLOR,
+    };
+
+    commands
+        .spawn((
+            SpatialBundle {
+                transform: Transform::from_xyz(0.0, 0.0, 0.0),
+                ..default()
+            },
+            DespawnOnExitGameOver,
+        ))
+        .with_children(|parent| {
+            parent.spawn((Text2dBundle {
+                transform: Transform::from_xyz(0.0, 3.0, 1.0).with_scale(Vec3::splat(0.01)),
+                text: Text {
+                    sections: vec![TextSection::new("Game Over", text_style.clone())],
+                    alignment: TextAlignment::Center,
+                    linebreak_behavior: bevy::text::BreakLineOn::NoWrap,
+                },
+                ..default()
+            },));
+            parent.spawn((
+                Text2dBundle {
+                    transform: Transform::from_xyz(0.0, 2.0, 1.0).with_scale(Vec3::splat(0.01)),
+                    text: Text {
+                        sections: vec![TextSection::new("", text_style.clone())],
+                        alignment: TextAlignment::Center,
+                        linebreak_behavior: bevy::text::BreakLineOn::NoWrap,
+                    },
+                    ..default()
+                },
+                ScoreDisplay::Sum,
+            ));
+            parent.spawn((Text2dBundle {
+                transform: Transform::from_xyz(0.0, 1.0, 1.0).with_scale(Vec3::splat(0.005)),
+                text: Text {
+                    sections: vec![TextSection::new("Click to restart", text_style.clone())],
+                    alignment: TextAlignment::Center,
+                    linebreak_behavior: bevy::text::BreakLineOn::NoWrap,
+                },
+                ..default()
+            },));
+        });
 }

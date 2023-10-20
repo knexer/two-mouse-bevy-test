@@ -30,7 +30,8 @@ impl Plugin for GameplayPlugin {
                 (update_score, display_score)
                     .chain()
                     .run_if(in_state(AppState::Playing)),
-            );
+            )
+            .add_systems(Update, display_score.run_if(in_state(AppState::GameOver)));
     }
 }
 
@@ -211,6 +212,7 @@ fn update_score(mut score: ResMut<Score>, shapes: Query<(&Transform, &Shape)>) {
 pub enum ScoreDisplay {
     Left,
     Right,
+    Sum,
 }
 
 fn display_score(score: Res<Score>, mut displays: Query<(&mut Text, &ScoreDisplay)>) {
@@ -218,6 +220,7 @@ fn display_score(score: Res<Score>, mut displays: Query<(&mut Text, &ScoreDispla
         text.sections[0].value = match display {
             ScoreDisplay::Left => format!("{}", score.left),
             ScoreDisplay::Right => format!("{}", score.right),
+            ScoreDisplay::Sum => format!("{}", score.left + score.right),
         };
     }
 }

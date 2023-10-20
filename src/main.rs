@@ -30,7 +30,8 @@ mod spawn_level;
 // MVP is in place! Polish time.
 
 // Polish:
-// Add a title screen shown during AppState::Init.
+// Add a title screen shown during AppState::Init. (done)
+// Add game over screen shown during AppState::GameOver. (done)
 // Sound effects!
 // Increase intensity over time.
 // Spawn shapes in more interesting ways. Randomized params, spawn in waves, spawn in patterns.
@@ -71,7 +72,9 @@ fn main() {
         .add_systems(Update, bevy::window::close_on_esc)
         .add_state::<AppState>()
         .add_systems(Update, start_playing.run_if(in_state(AppState::Init)))
+        .add_systems(OnExit(AppState::Init), despawn_on_exit_init)
         .add_systems(Update, start_new_game.run_if(in_state(AppState::GameOver)))
+        .add_systems(OnExit(AppState::GameOver), despawn_on_exit_game_over)
         .run();
 }
 
@@ -139,5 +142,26 @@ fn start_new_game(
         {
             app_state.set(AppState::Playing);
         }
+    }
+}
+
+#[derive(Component)]
+pub struct DespawnOnExitInit;
+
+fn despawn_on_exit_init(mut commands: Commands, mut query: Query<(Entity, &DespawnOnExitInit)>) {
+    for (entity, _) in query.iter_mut() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+#[derive(Component)]
+pub struct DespawnOnExitGameOver;
+
+fn despawn_on_exit_game_over(
+    mut commands: Commands,
+    mut query: Query<(Entity, &DespawnOnExitGameOver)>,
+) {
+    for (entity, _) in query.iter_mut() {
+        commands.entity(entity).despawn_recursive();
     }
 }
