@@ -30,16 +30,19 @@ mod spawn_level;
 // MVP is in place! Polish time.
 
 // Polish:
-// Add a title screen shown during AppState::Init. (done)
-// Add game over screen shown during AppState::GameOver. (done)
 // Sound effects!
 // Increase intensity over time.
 // Spawn shapes in more interesting ways. Randomized params, spawn in waves, spawn in patterns.
 // Round the rest of the corners on the right side of the level.
+// Visual polish on the level shapes.
+// Add drop shadows to shapes and cursor/chain.
+// Improve the game over screen layout.
 
 // Done polish:
 // Differentiate left vs right cursors visually. (done)
 // Pick a nicer color palette and recolor everything with it. (done)
+// Add a title screen shown during AppState::Init. (done)
+// Add game over screen shown during AppState::GameOver. (done)
 
 // Bugs:
 // - Window resolution doesn't seem to be working as I expect it to.
