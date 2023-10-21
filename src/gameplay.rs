@@ -9,7 +9,8 @@ use rand::Rng;
 
 use crate::{
     spawn_level::{
-        Layer, LEFT_SCORE_REGION, RIGHT_SCORE_REGION, SHAPE_ALIVE_REGION, SHAPE_SPAWN_REGION,
+        Layer, LEFT_SCORE_REGION, PLAY_REGION, RIGHT_SCORE_REGION, SHAPE_ALIVE_REGION,
+        SHAPE_SPAWN_REGION,
     },
     AppState, LEFT_COLOR, RIGHT_COLOR,
 };
@@ -178,7 +179,9 @@ fn spawn_shapes(
 
 fn despawn_shapes(mut commands: Commands, mut shapes: Query<(Entity, &Transform), With<Shape>>) {
     for (entity, transform) in shapes.iter_mut() {
-        if !SHAPE_ALIVE_REGION.contains(transform.translation.truncate()) {
+        if !PLAY_REGION.contains(transform.translation.truncate())
+            && !SHAPE_ALIVE_REGION.contains(transform.translation.truncate())
+        {
             commands.entity(entity).despawn_recursive();
         }
     }

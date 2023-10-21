@@ -37,6 +37,7 @@ mod spawn_level;
 // Visual polish on the level shapes.
 // Add drop shadows to shapes and cursor/chain.
 // Improve the game over screen layout.
+// Add left and right mouse button images to the title/setup screen.
 
 // Done polish:
 // Differentiate left vs right cursors visually. (done)
@@ -46,7 +47,6 @@ mod spawn_level;
 
 // Bugs:
 // - Window resolution doesn't seem to be working as I expect it to.
-// - Shapes can get stuck on top of the level, preventing the game from ending.
 
 const PIXELS_PER_METER: f32 = 100.0;
 pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);

@@ -64,9 +64,13 @@ pub const SHAPE_SPAWN_REGION: Rect = Rect {
     min: Vec2::new(-3.0, 5.0),
     max: Vec2::new(3.0, 6.0),
 };
+pub const PLAY_REGION: Rect = Rect {
+    min: Vec2::new(LEFT, BOTTOM - 1.0),
+    max: Vec2::new(RIGHT, TOP),
+};
 pub const SHAPE_ALIVE_REGION: Rect = Rect {
-    min: Vec2::new(-WIDTH, -HEIGHT),
-    max: Vec2::new(WIDTH, HEIGHT),
+    min: Vec2::new(SHAPE_SPAWN_REGION.min.x, PLAY_REGION.max.y),
+    max: SHAPE_SPAWN_REGION.max,
 };
 
 const OUTER_WALL_THICKNESS: f32 = 0.25;
