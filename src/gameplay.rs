@@ -125,56 +125,100 @@ fn configure_shapes(
         },
         Name::new("CircleConfig"),
     ));
-    commands.insert_resource(ShapeTimer(Timer::from_seconds(2.0, TimerMode::Once)));
+    commands.insert_resource(ShapeSpawnState {
+        strategy: ShapeSpawnStrategy::Random(3),
+        timer: Timer::from_seconds(2.0, TimerMode::Once),
+    });
 }
 
 #[derive(Resource)]
-struct ShapeTimer(Timer);
+enum ShapeSpawnStrategy {
+    Random(u32),
+    Shotgun,
+}
+
+#[derive(Resource)]
+struct ShapeSpawnState {
+    strategy: ShapeSpawnStrategy,
+    timer: Timer,
+}
 
 fn spawn_shapes(
     mut commands: Commands,
-    mut shape_configs: Query<&mut ShapeConfig>,
-    mut shape_timer: ResMut<ShapeTimer>,
+    shape_configs: Query<&ShapeConfig>,
+    mut spawn_state: ResMut<ShapeSpawnState>,
     mut level_state: ResMut<LevelState>,
     time: Res<Time>,
 ) {
     if level_state.num_shapes_remaining == 0 {
         return;
     }
-    if !shape_timer
-        .0
+    if !spawn_state
+        .timer
         .tick(Duration::from_secs_f32(time.delta_seconds()))
         .just_finished()
     {
         return;
     }
-    level_state.num_shapes_remaining -= 1;
 
     let mut rng = rand::thread_rng();
     // Pick a random shape config
-    let shape_configs = shape_configs.iter_mut().collect::<Vec<_>>();
+    let shape_configs = shape_configs.iter().collect::<Vec<_>>();
     let shape_config = &shape_configs[rng.gen_range(0..shape_configs.len())];
 
-    let x = rng.gen_range(SHAPE_SPAWN_REGION.min.x..SHAPE_SPAWN_REGION.max.x);
-    let y = rng.gen_range(SHAPE_SPAWN_REGION.min.y..SHAPE_SPAWN_REGION.max.y);
-    commands.spawn((
-        MaterialMesh2dBundle {
-            transform: Transform::from_xyz(x, y, 0.0),
-            mesh: shape_config.mesh.clone(),
-            material: shape_config.material.clone(),
-            ..default()
-        },
-        RigidBody::Dynamic,
-        shape_config.collider.clone(),
-        shape_config.shape.clone(),
-        CollisionLayers::new([Layer::Shapes], [Layer::Rope, Layer::Level, Layer::Shapes]),
-        Name::new(shape_config.shape.to_string()),
-    ));
+    let mut spawn_shape = |shape_config: &ShapeConfig| {
+        let x = rng.gen_range(SHAPE_SPAWN_REGION.min.x..SHAPE_SPAWN_REGION.max.x);
+        let y = rng.gen_range(SHAPE_SPAWN_REGION.min.y..SHAPE_SPAWN_REGION.max.y);
+        commands.spawn((
+            MaterialMesh2dBundle {
+                transform: Transform::from_xyz(x, y, 0.0),
+                mesh: shape_config.mesh.clone(),
+                material: shape_config.material.clone(),
+                ..default()
+            },
+            RigidBody::Dynamic,
+            shape_config.collider.clone(),
+            shape_config.shape.clone(),
+            CollisionLayers::new([Layer::Shapes], [Layer::Rope, Layer::Level, Layer::Shapes]),
+            Name::new(shape_config.shape.to_string()),
+        ));
+    };
 
-    shape_timer
-        .0
-        .set_duration(Duration::from_secs_f32(rng.gen_range(1.0..3.0)));
-    shape_timer.0.reset();
+    let pick_random_strategy = |rng: &mut rand::rngs::ThreadRng| match rng.gen_bool(0.5) {
+        true => ShapeSpawnStrategy::Shotgun,
+        false => ShapeSpawnStrategy::Random(3),
+    };
+
+    match spawn_state.strategy {
+        ShapeSpawnStrategy::Random(num_shapes) => {
+            level_state.num_shapes_remaining -= 1;
+
+            spawn_shape(shape_config);
+
+            spawn_state
+                .timer
+                .set_duration(Duration::from_secs_f32(rng.gen_range(1.0..3.0)));
+            spawn_state.strategy = match num_shapes {
+                1 => pick_random_strategy(&mut rng),
+                _ => ShapeSpawnStrategy::Random(num_shapes - 1),
+            };
+        }
+        ShapeSpawnStrategy::Shotgun => {
+            let num_shapes = u32::min(level_state.num_shapes_remaining, 3);
+            level_state.num_shapes_remaining -= num_shapes;
+
+            for _ in 0..num_shapes {
+                spawn_shape(shape_config);
+            }
+
+            spawn_state
+                .timer
+                .set_duration(Duration::from_secs_f32(rng.gen_range(3.0..5.0)));
+            spawn_state.strategy = pick_random_strategy(&mut rng);
+        }
+    }
+
+    spawn_state.timer.reset();
 }
 
 fn despawn_shapes(mut commands: Commands, mut shapes: Query<(Entity, &Transform), With<Shape>>) {
