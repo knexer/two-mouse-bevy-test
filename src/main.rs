@@ -75,9 +75,12 @@ fn main() {
         .add_systems(Update, bevy::window::close_on_esc)
         .add_state::<AppState>()
         .add_systems(Update, start_playing.run_if(in_state(AppState::Init)))
-        .add_systems(OnExit(AppState::Init), despawn_on_exit_init)
+        .add_systems(OnExit(AppState::Init), cleanup_system::<DespawnOnExitInit>)
         .add_systems(Update, start_new_game.run_if(in_state(AppState::GameOver)))
-        .add_systems(OnExit(AppState::GameOver), despawn_on_exit_game_over)
+        .add_systems(
+            OnExit(AppState::GameOver),
+            cleanup_system::<DespawnOnExitGameOver>,
+        )
         .run();
 }
 
@@ -151,20 +154,11 @@ fn start_new_game(
 #[derive(Component)]
 pub struct DespawnOnExitInit;
 
-fn despawn_on_exit_init(mut commands: Commands, mut query: Query<(Entity, &DespawnOnExitInit)>) {
-    for (entity, _) in query.iter_mut() {
-        commands.entity(entity).despawn_recursive();
-    }
-}
-
 #[derive(Component)]
 pub struct DespawnOnExitGameOver;
 
-fn despawn_on_exit_game_over(
-    mut commands: Commands,
-    mut query: Query<(Entity, &DespawnOnExitGameOver)>,
-) {
-    for (entity, _) in query.iter_mut() {
-        commands.entity(entity).despawn_recursive();
+fn cleanup_system<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
+    for e in q.iter() {
+        commands.entity(e).despawn_recursive();
     }
 }
