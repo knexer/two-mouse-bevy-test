@@ -47,6 +47,7 @@ mod spawn_level;
 
 // Bugs:
 // - Window resolution doesn't seem to be working as I expect it to.
+// - Game over can trigger before all shapes have fallen. System ordering issue.
 
 const PIXELS_PER_METER: f32 = 100.0;
 pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);
