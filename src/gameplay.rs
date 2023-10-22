@@ -155,14 +155,23 @@ impl ShapeSpawnState {
         }
 
         let strategy = self.strategy.take();
-        match strategy {
-            Some(mut strategy) => {
-                let num_shapes = strategy.on_timer_finish(self, commands, shape_configs);
-                self.strategy = Some(strategy);
-                num_shapes
+
+        let (num_shapes, duration) = match strategy {
+            Some(mut s) => {
+                let result = s.on_timer_finish(self, commands, shape_configs);
+                self.strategy = Some(s);
+                result
             }
-            None => 0,
+            None => (0, None),
+        };
+
+        self.num_shapes -= num_shapes;
+        if let Some(duration) = duration {
+            self.timer.set_duration(duration);
+            self.timer.reset();
         }
+
+        return num_shapes;
     }
 
     fn is_done(&self) -> bool {
@@ -173,10 +182,10 @@ impl ShapeSpawnState {
 trait ShapeSpawnStrategy: Send + Sync {
     fn on_timer_finish(
         &mut self,
-        state: &mut ShapeSpawnState,
+        state: &ShapeSpawnState,
         commands: &mut Commands,
         shape_configs: Query<&ShapeConfig>,
-    ) -> u32;
+    ) -> (u32, Option<Duration>);
 }
 
 struct RandomSequence;
@@ -196,10 +205,10 @@ impl RandomSequence {
 impl ShapeSpawnStrategy for RandomSequence {
     fn on_timer_finish(
         &mut self,
-        state: &mut ShapeSpawnState,
+        state: &ShapeSpawnState,
         commands: &mut Commands,
         shape_configs: Query<&ShapeConfig>,
-    ) -> u32 {
+    ) -> (u32, Option<Duration>) {
         let mut rng = rand::thread_rng();
         // Pick a random shape config
         let shape_configs = shape_configs.iter().collect::<Vec<_>>();
@@ -207,14 +216,13 @@ impl ShapeSpawnStrategy for RandomSequence {
 
         spawn_shape(commands, shape_config);
 
-        state.num_shapes -= 1;
-
-        // Reset the timer for the next shape
-        if state.num_shapes > 0 {
-            state.timer.reset();
-        }
-
-        1
+        (
+            1,
+            match state.num_shapes {
+                0 => None,
+                _ => Some(Duration::from_secs_f32(rng.gen_range(1.5..2.5))),
+            },
+        )
     }
 }
 
@@ -235,28 +243,22 @@ impl Shotgun {
 impl ShapeSpawnStrategy for Shotgun {
     fn on_timer_finish(
         &mut self,
-        state: &mut ShapeSpawnState,
+        state: &ShapeSpawnState,
         commands: &mut Commands,
         shape_configs: Query<&ShapeConfig>,
-    ) -> u32 {
+    ) -> (u32, Option<Duration>) {
         let mut rng = rand::thread_rng();
         // Pick a random shape config
         let shape_configs = shape_configs.iter().collect::<Vec<_>>();
         let shape_config = &shape_configs[rng.gen_range(0..shape_configs.len())];
 
-        let num_shapes = state.num_shapes;
-        for _ in 0..num_shapes {
+        for _ in 0..state.num_shapes {
             spawn_shape(commands, shape_config);
         }
-        state.num_shapes = 0;
-
-        // Add an extra rest period after the shotgun blast
-        state
-            .timer
-            .set_duration(Duration::from_secs_f32(rng.gen_range(1.5..2.0)));
-        state.timer.reset();
-
-        num_shapes
+        (
+            state.num_shapes,
+            Some(Duration::from_secs_f32(rng.gen_range(1.5..2.0))),
+        )
     }
 }
 
