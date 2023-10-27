@@ -31,7 +31,6 @@ mod spawn_level;
 
 // Polish:
 // Sound effects!
-// Increase intensity over time.
 // Spawn shapes in more interesting ways. Randomized params, spawn in waves, spawn in patterns.
 // Round the rest of the corners on the right side of the level.
 // Visual polish on the level shapes.
@@ -44,10 +43,11 @@ mod spawn_level;
 // Pick a nicer color palette and recolor everything with it. (done)
 // Add a title screen shown during AppState::Init. (done)
 // Add game over screen shown during AppState::GameOver. (done)
+// Increase intensity over time. (done)
+// Two shape patterns (sequence and shotgun). (done)
 
 // Bugs:
 // - Window resolution doesn't seem to be working as I expect it to.
-// - Game over can trigger before all shapes have fallen. System ordering issue.
 
 const PIXELS_PER_METER: f32 = 100.0;
 pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);

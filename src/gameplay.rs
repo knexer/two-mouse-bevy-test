@@ -15,17 +15,25 @@ use crate::{
     AppState, LEFT_COLOR, RIGHT_COLOR,
 };
 
+const NUM_SHAPES: u32 = 4;
+
 pub struct GameplayPlugin;
 
 impl Plugin for GameplayPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, configure_shapes)
+            .add_systems(OnEnter(AppState::Playing), start_level)
             .add_systems(
                 Update,
-                (spawn_shapes, despawn_shapes).run_if(in_state(AppState::Playing)),
+                (
+                    increase_intensity,
+                    (spawn_shapes, despawn_shapes),
+                    apply_deferred,
+                    detect_game_over,
+                )
+                    .chain()
+                    .run_if(in_state(AppState::Playing)),
             )
-            .add_systems(OnEnter(AppState::Playing), start_level)
-            .add_systems(Update, detect_game_over.run_if(in_state(AppState::Playing)))
             .add_systems(
                 Update,
                 (update_score, display_score)
@@ -45,11 +53,17 @@ fn start_level(mut commands: Commands, shapes: Query<Entity, With<Shape>>) {
             num_shapes: 0,
             strategy: None,
         },
-        num_shapes_remaining: 10,
+        num_shapes_remaining: NUM_SHAPES,
+        intensity: 0.0,
     });
     for entity in shapes.iter() {
         commands.entity(entity).despawn_recursive();
     }
+}
+
+fn increase_intensity(mut level_state: ResMut<LevelState>) {
+    level_state.intensity =
+        (NUM_SHAPES - level_state.num_shapes_remaining) as f32 / NUM_SHAPES as f32;
 }
 
 fn detect_game_over(
@@ -62,7 +76,6 @@ fn detect_game_over(
             let location = transform.translation.truncate();
             LEFT_SCORE_REGION.contains(location) || RIGHT_SCORE_REGION.contains(location)
         }) {
-            println!("Game over!");
             app_state.set(AppState::GameOver);
         }
     }
@@ -145,6 +158,7 @@ impl ShapeSpawnState {
         commands: &mut Commands,
         shape_configs: Query<&ShapeConfig>,
         time: Res<Time>,
+        intensity: f32,
     ) -> u32 {
         if !self.timer.tick(time.delta()).just_finished() {
             return 0;
@@ -158,7 +172,7 @@ impl ShapeSpawnState {
 
         let (num_shapes, duration) = match strategy {
             Some(mut s) => {
-                let result = s.on_timer_finish(self, commands, shape_configs);
+                let result = s.on_timer_finish(self, commands, shape_configs, intensity);
                 self.strategy = Some(s);
                 result
             }
@@ -185,17 +199,36 @@ trait ShapeSpawnStrategy: Send + Sync {
         state: &ShapeSpawnState,
         commands: &mut Commands,
         shape_configs: Query<&ShapeConfig>,
+        intensity: f32,
     ) -> (u32, Option<Duration>);
+}
+
+fn interpolate_ranges(
+    zero_intensity_range: std::ops::Range<f32>,
+    max_intensity_range: std::ops::Range<f32>,
+    intensity: f32,
+) -> std::ops::Range<f32> {
+    zero_intensity_range.start * (1.0 - intensity) + max_intensity_range.start * intensity
+        ..zero_intensity_range.end * (1.0 - intensity) + max_intensity_range.end * intensity
 }
 
 struct RandomSequence;
 
 impl RandomSequence {
-    fn install(num_shapes_remaining: u32) -> ShapeSpawnState {
+    fn new(num_shapes_remaining: u32, intensity: f32) -> ShapeSpawnState {
+        let zero_intensity_timer_range = 2.0..3.0;
+        let max_intensity_timer_range = 0.75..1.25;
         let mut rng = rand::thread_rng();
         ShapeSpawnState {
-            num_shapes: u32::min(rng.gen_range(1..3), num_shapes_remaining),
-            timer: Timer::from_seconds(rng.gen_range(1.5..2.5), TimerMode::Once),
+            num_shapes: u32::min(rng.gen_range(1..=3), num_shapes_remaining),
+            timer: Timer::from_seconds(
+                rng.gen_range(interpolate_ranges(
+                    zero_intensity_timer_range,
+                    max_intensity_timer_range,
+                    intensity,
+                )),
+                TimerMode::Once,
+            ),
             strategy: Some(Box::new(RandomSequence)),
         }
     }
@@ -208,6 +241,7 @@ impl ShapeSpawnStrategy for RandomSequence {
         state: &ShapeSpawnState,
         commands: &mut Commands,
         shape_configs: Query<&ShapeConfig>,
+        intensity: f32,
     ) -> (u32, Option<Duration>) {
         let mut rng = rand::thread_rng();
         // Pick a random shape config
@@ -216,11 +250,17 @@ impl ShapeSpawnStrategy for RandomSequence {
 
         spawn_shape(commands, shape_config);
 
+        let zero_intensity_timer_range = 2.0..3.0;
+        let max_intensity_timer_range = 0.75..1.25;
         (
             1,
             match state.num_shapes {
                 0 => None,
-                _ => Some(Duration::from_secs_f32(rng.gen_range(1.5..2.5))),
+                _ => Some(Duration::from_secs_f32(rng.gen_range(interpolate_ranges(
+                    zero_intensity_timer_range,
+                    max_intensity_timer_range,
+                    intensity,
+                )))),
             },
         )
     }
@@ -229,11 +269,22 @@ impl ShapeSpawnStrategy for RandomSequence {
 struct Shotgun;
 
 impl Shotgun {
-    fn install(num_shapes_remaining: u32) -> ShapeSpawnState {
+    fn new(num_shapes_remaining: u32, intensity: f32) -> ShapeSpawnState {
         let mut rng = rand::thread_rng();
+
+        let zero_intensity_timer_range = 2.0..3.0;
+        let max_intensity_timer_range = 0.75..1.25;
+
         ShapeSpawnState {
-            num_shapes: u32::min(rng.gen_range(2..3), num_shapes_remaining),
-            timer: Timer::from_seconds(rng.gen_range(1.5..2.5), TimerMode::Once),
+            num_shapes: u32::min(rng.gen_range(2..=3), num_shapes_remaining),
+            timer: Timer::from_seconds(
+                rng.gen_range(interpolate_ranges(
+                    zero_intensity_timer_range,
+                    max_intensity_timer_range,
+                    intensity,
+                )),
+                TimerMode::Once,
+            ),
             strategy: Some(Box::new(Shotgun)),
         }
     }
@@ -246,18 +297,26 @@ impl ShapeSpawnStrategy for Shotgun {
         state: &ShapeSpawnState,
         commands: &mut Commands,
         shape_configs: Query<&ShapeConfig>,
+        intensity: f32,
     ) -> (u32, Option<Duration>) {
         let mut rng = rand::thread_rng();
         // Pick a random shape config
         let shape_configs = shape_configs.iter().collect::<Vec<_>>();
         let shape_config = &shape_configs[rng.gen_range(0..shape_configs.len())];
 
+        let zero_intensity_timer_range = 3.0..4.0;
+        let max_intensity_timer_range = 1.25..1.75;
+
         for _ in 0..state.num_shapes {
             spawn_shape(commands, shape_config);
         }
         (
             state.num_shapes,
-            Some(Duration::from_secs_f32(rng.gen_range(1.5..2.0))),
+            Some(Duration::from_secs_f32(rng.gen_range(interpolate_ranges(
+                zero_intensity_timer_range,
+                max_intensity_timer_range,
+                intensity,
+            )))),
         )
     }
 }
@@ -290,17 +349,18 @@ fn spawn_shapes(
     if level_state.num_shapes_remaining == 0 {
         return;
     }
+    let intensity = level_state.intensity;
     let num_shapes = level_state
         .spawn_state
-        .tick(&mut commands, shape_configs, time);
+        .tick(&mut commands, shape_configs, time, intensity);
     level_state.num_shapes_remaining -= num_shapes;
 
     if level_state.spawn_state.is_done() {
         let mut rng = rand::thread_rng();
 
-        level_state.spawn_state = match rng.gen_bool(0.5) {
-            true => RandomSequence::install(level_state.num_shapes_remaining),
-            false => Shotgun::install(level_state.num_shapes_remaining),
+        level_state.spawn_state = match rng.gen_bool((1.0 - intensity) as f64) {
+            true => RandomSequence::new(level_state.num_shapes_remaining, level_state.intensity),
+            false => Shotgun::new(level_state.num_shapes_remaining, level_state.intensity),
         };
     }
 }
@@ -360,4 +420,5 @@ fn display_score(score: Res<Score>, mut displays: Query<(&mut Text, &ScoreDispla
 struct LevelState {
     num_shapes_remaining: u32,
     spawn_state: ShapeSpawnState,
+    intensity: f32,
 }
