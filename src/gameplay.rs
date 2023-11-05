@@ -15,7 +15,7 @@ use crate::{
     AppState, LEFT_COLOR, RIGHT_COLOR,
 };
 
-const NUM_SHAPES: u32 = 4;
+const NUM_SHAPES: u32 = 20;
 
 pub struct GameplayPlugin;
 
