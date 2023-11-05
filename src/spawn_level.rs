@@ -8,8 +8,8 @@ use bevy_xpbd_2d::prelude::*;
 
 use crate::{
     gameplay::ScoreDisplay,
-    path::{Path, WindDirection},
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
+    util::path::{Path, WindDirection},
     AppState, DespawnOnExitGameOver, DespawnOnExitInit, BAD_COLOR, LEFT_COLOR, RIGHT_COLOR,
     TEXT_COLOR,
 };

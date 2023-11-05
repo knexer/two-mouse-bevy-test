@@ -13,9 +13,9 @@ use spawn_level::{SpawnPlugin, SpawnState};
 
 mod gameplay;
 mod mischief;
-mod path;
 mod player;
 mod spawn_level;
+mod util;
 
 // MVP brief features:
 
