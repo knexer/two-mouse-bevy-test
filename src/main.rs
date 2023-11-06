@@ -5,13 +5,10 @@ use bevy::{
     window::WindowResolution,
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use bevy_xpbd_2d::prelude::*;
-use gameplay::GameplayPlugin;
-use mischief::{MischiefEvent, MischiefEventData};
-use player::{AttachState, PlayerPlugin};
-use spawn_level::{SpawnPlugin, SpawnState};
+use link::LinkPlugin;
 
 mod gameplay;
+mod link;
 mod mischief;
 mod player;
 mod spawn_level;
@@ -51,19 +48,11 @@ mod util;
 
 const PIXELS_PER_METER: f32 = 100.0;
 pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);
-pub const LEFT_COLOR: Color = Color::rgb(17.0 / 255.0, 159.0 / 255.0, 166.0 / 255.0);
-pub const RIGHT_COLOR: Color = Color::rgb(226.0 / 255.0, 101.0 / 255.0, 60.0 / 255.0);
-pub const TEXT_COLOR: Color = Color::rgb(215.0 / 255.0, 217.0 / 255.0, 206.0 / 255.0);
-pub const BAD_COLOR: Color = Color::rgb(229.0 / 255.0, 39.0 / 255.0, 36.0 / 255.0);
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(PlayerPlugin)
-        .add_plugins(SpawnPlugin)
-        .add_plugins(GameplayPlugin)
-        .add_plugins(PhysicsPlugins::new(FixedUpdate))
-        .insert_resource(SubstepCount(20))
+        .add_plugins(LinkPlugin)
         .add_plugins(WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::Grave)))
         .add_systems(
             Update,
@@ -74,14 +63,6 @@ fn main() {
             (size_window, spawn_camera, toggle_os_cursor).chain(),
         )
         .add_systems(Update, bevy::window::close_on_esc)
-        .add_state::<AppState>()
-        .add_systems(Update, start_playing.run_if(in_state(AppState::Init)))
-        .add_systems(OnExit(AppState::Init), cleanup_system::<DespawnOnExitInit>)
-        .add_systems(Update, start_new_game.run_if(in_state(AppState::GameOver)))
-        .add_systems(
-            OnExit(AppState::GameOver),
-            cleanup_system::<DespawnOnExitGameOver>,
-        )
         .run();
 }
 
@@ -117,49 +98,4 @@ fn spawn_camera(mut commands: Commands) {
         },
         ..default()
     });
-}
-
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
-pub enum AppState {
-    #[default]
-    Init,
-    Playing,
-    GameOver,
-}
-
-fn start_playing(
-    spawn_state: Res<State<SpawnState>>,
-    attach_state: Res<State<AttachState>>,
-    mut app_state: ResMut<NextState<AppState>>,
-) {
-    if spawn_state.get() == &SpawnState::Done && attach_state.get() == &AttachState::Attached {
-        app_state.set(AppState::Playing);
-    }
-}
-
-fn start_new_game(
-    mut app_state: ResMut<NextState<AppState>>,
-    mut mischief_events: EventReader<MischiefEvent>,
-) {
-    for event in mischief_events.iter() {
-        if let MischiefEventData::Button {
-            button: _,
-            pressed: true,
-        } = event.event_data
-        {
-            app_state.set(AppState::Playing);
-        }
-    }
-}
-
-#[derive(Component)]
-pub struct DespawnOnExitInit;
-
-#[derive(Component)]
-pub struct DespawnOnExitGameOver;
-
-fn cleanup_system<T: Component>(mut commands: Commands, q: Query<Entity, With<T>>) {
-    for e in q.iter() {
-        commands.entity(e).despawn_recursive();
-    }
 }

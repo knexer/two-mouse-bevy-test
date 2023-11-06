@@ -8,10 +8,12 @@ use bevy_xpbd_2d::prelude::*;
 
 use crate::{
     gameplay::ScoreDisplay,
+    link::{
+        AppState, DespawnOnExitGameOver, DespawnOnExitInit, BAD_COLOR, LEFT_COLOR, RIGHT_COLOR,
+        TEXT_COLOR,
+    },
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
     util::path::{Path, WindDirection},
-    AppState, DespawnOnExitGameOver, DespawnOnExitInit, BAD_COLOR, LEFT_COLOR, RIGHT_COLOR,
-    TEXT_COLOR,
 };
 
 pub struct SpawnPlugin;
