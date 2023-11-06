@@ -7,13 +7,11 @@ use bevy::{
 use bevy_xpbd_2d::prelude::*;
 use rand::Rng;
 
-use crate::{
-    link::{AppState, LEFT_COLOR, RIGHT_COLOR},
-    spawn_level::{
-        Layer, LEFT_SCORE_REGION, PLAY_REGION, RIGHT_SCORE_REGION, SHAPE_ALIVE_REGION,
-        SHAPE_SPAWN_REGION,
-    },
+use super::spawn_level::{
+    Layer, LEFT_SCORE_REGION, PLAY_REGION, RIGHT_SCORE_REGION, SHAPE_ALIVE_REGION,
+    SHAPE_SPAWN_REGION,
 };
+use super::{AppState, LEFT_COLOR, RIGHT_COLOR};
 
 const NUM_SHAPES: u32 = 20;
 

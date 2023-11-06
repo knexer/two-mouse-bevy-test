@@ -6,15 +6,13 @@ use bevy::{
 };
 use bevy_xpbd_2d::prelude::*;
 
-use crate::{
+use super::{
     gameplay::ScoreDisplay,
-    link::{
-        AppState, DespawnOnExitGameOver, DespawnOnExitInit, BAD_COLOR, LEFT_COLOR, RIGHT_COLOR,
-        TEXT_COLOR,
-    },
     player::{Cursor, LeftCursor, PIDController, RightCursor, TargetVelocity},
-    util::path::{Path, WindDirection},
+    AppState, DespawnOnExitGameOver, DespawnOnExitInit, BAD_COLOR, LEFT_COLOR, RIGHT_COLOR,
+    TEXT_COLOR,
 };
+use crate::util::path::{Path, WindDirection};
 
 pub struct SpawnPlugin;
 
